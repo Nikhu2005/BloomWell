@@ -85,7 +85,7 @@ Audit logs for every medical-record access
 
 Clone the repository:
 
-git clone https://github.com/your-username/BloomWell.git
+git clone https://github.com/Nikhu2005/BloomWell.git
 cd BloomWell
 
 
