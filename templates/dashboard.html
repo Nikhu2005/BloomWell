@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+</head>
+<body class="app-page">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-icon-sm">🌸</span>
+    <span class="brand-text">BloomWell</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="#doctors" class="nav-item active" onclick="showSection('doctors', this)">
+      <span class="nav-icon">👩‍⚕️</span> Doctors
+    </a>
+    <a href="#history" class="nav-item" onclick="showSection('history', this)">
+      <span class="nav-icon">💬</span> My Chats
+    </a>
+    <a href="#categories" class="nav-item" onclick="showSection('categories', this)">
+      <span class="nav-icon">🩺</span> Categories
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="user-badge">
+      <div class="user-avatar-sm">{{ username[0].upper() }}</div>
+      <div>
+        <div class="user-name-sm">{{ username }}</div>
+        <div class="user-status">🔒 Anonymous</div>
+      </div>
+    </div>
+    <a href="/logout" class="logout-btn">Sign Out</a>
+  </div>
+</aside>
+
+<!-- Main Content -->
+<main class="main-content">
+
+  <!-- Header -->
+  <header class="dash-header">
+    <div>
+      <h2 class="dash-greeting">Hello, <em>{{ username }}</em> 🌸</h2>
+      <p class="dash-sub">Your safe space for women's wellness</p>
+    </div>
+    <div class="header-badges">
+      <span class="badge-secure">🔒 End-to-End Encrypted</span>
+      <span class="badge-anon">🌸 Anonymous Mode</span>
+    </div>
+  </header>
+
+  <!-- Stats Row -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-num">{{ history|length }}</div>
+      <div class="stat-label">Active Consultations</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">{{ doctors|length }}</div>
+      <div class="stat-label">Verified Doctors</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num">4</div>
+      <div class="stat-label">Health Categories</div>
+    </div>
+  </div>
+
+  <!-- DOCTORS SECTION -->
+  <section id="section-doctors" class="dash-section">
+    <div class="section-header">
+      <h3 class="section-title">Verified Doctors</h3>
+      <!-- Filter Pills -->
+      <div class="filter-pills">
+        <button class="pill active" onclick="filterDoctors('all', this)">All</button>
+        <button class="pill" onclick="filterDoctors('menstrual', this)">🩸 Menstrual</button>
+        <button class="pill" onclick="filterDoctors('sexual', this)">💜 Sexual Health</button>
+        <button class="pill" onclick="filterDoctors('mental', this)">🧠 Mental Health</button>
+        <button class="pill" onclick="filterDoctors('general', this)">🩺 General</button>
+      </div>
+    </div>
+
+    <div class="doctor-grid" id="doctor-grid">
+      {% for doc in doctors %}
+      <div class="doctor-card" data-category="{{ doc.category }}">
+        <div class="doc-avatar" style="background:{{ doc.avatar_color }}">
+          {{ doc.name.split()[1][0] }}{{ doc.name.split()[2][0] if doc.name.split()|length > 2 else '' }}
+        </div>
+        <div class="doc-info">
+          <div class="doc-name">{{ doc.name }}</div>
+          <div class="doc-specialty">{{ doc.specialty }}</div>
+          <div class="doc-meta">
+            <span class="doc-exp">{{ doc.experience }}yr exp</span>
+            <span class="doc-rating">⭐ {{ doc.rating }}</span>
+          </div>
+          <span class="doc-category-badge cat-{{ doc.category }}">
+            {% if doc.category == 'menstrual' %}🩸 Menstrual
+            {% elif doc.category == 'sexual' %}💜 Sexual Health
+            {% elif doc.category == 'mental' %}🧠 Mental Health
+            {% else %}🩺 General{% endif %}
+          </span>
+        </div>
+        <div class="doc-actions">
+          <div class="availability {% if doc.available %}avail-yes{% else %}avail-no{% endif %}">
+            {% if doc.available %}● Available{% else %}○ Busy{% endif %}
+          </div>
+          <a href="/chat/{{ doc.id }}" class="btn-consult {% if not doc.available %}disabled{% endif %}">
+            Consult Now
+          </a>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- CHAT HISTORY SECTION -->
+  <section id="section-history" class="dash-section hidden">
+    <h3 class="section-title">My Consultations</h3>
+    {% if history %}
+    <div class="history-list">
+      {% for item in history %}
+      <div class="history-card">
+        <div class="doc-avatar-sm" style="background:{{ item.doctor.avatar_color }}">
+          {{ item.doctor.name.split()[1][0] }}
+        </div>
+        <div class="history-info">
+          <div class="history-doc">{{ item.doctor.name }}</div>
+          <div class="history-preview">{{ item.last_msg.content[:60] }}…</div>
+          <div class="history-time">{{ item.last_msg.timestamp.strftime('%d %b, %I:%M %p') }}</div>
+        </div>
+        <div class="history-actions">
+          <a href="/chat/{{ item.doctor.id }}" class="btn-sm-primary">Resume</a>
+          <form method="POST" action="/delete_chat/{{ item.room_id }}" onsubmit="return confirm('Delete this chat?')">
+            <button type="submit" class="btn-sm-danger">🗑 Delete</button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+      <div class="empty-icon">💬</div>
+      <p>No consultations yet. Browse doctors and start a conversation!</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <!-- CATEGORIES SECTION -->
+  <section id="section-categories" class="dash-section hidden">
+    <h3 class="section-title">Health Categories</h3>
+    <div class="category-grid">
+      <div class="category-card cat-card-menstrual" onclick="filterAndSwitch('menstrual')">
+        <div class="cat-emoji">🩸</div>
+        <div class="cat-name">Menstrual Health</div>
+        <div class="cat-desc">Cycles, PCOS, endometriosis & more</div>
+        <div class="cat-count">{{ doctors | selectattr('category','equalto','menstrual') | list | length }} Specialists</div>
+      </div>
+      <div class="category-card cat-card-sexual" onclick="filterAndSwitch('sexual')">
+        <div class="cat-emoji">💜</div>
+        <div class="cat-name">Sexual Wellness</div>
+        <div class="cat-desc">Safe, private guidance on intimate health</div>
+        <div class="cat-count">{{ doctors | selectattr('category','equalto','sexual') | list | length }} Specialists</div>
+      </div>
+      <div class="category-card cat-card-mental" onclick="filterAndSwitch('mental')">
+        <div class="cat-emoji">🧠</div>
+        <div class="cat-name">Mental Health</div>
+        <div class="cat-desc">Anxiety, stress, therapy & emotional support</div>
+        <div class="cat-count">{{ doctors | selectattr('category','equalto','mental') | list | length }} Specialists</div>
+      </div>
+      <div class="category-card cat-card-general" onclick="filterAndSwitch('general')">
+        <div class="cat-emoji">🩺</div>
+        <div class="cat-name">General Health</div>
+        <div class="cat-desc">Everyday health questions & wellness tips</div>
+        <div class="cat-count">{{ doctors | selectattr('category','equalto','general') | list | length }} Specialists</div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+function showSection(name, el) {
+  document.querySelectorAll('.dash-section').forEach(s => s.classList.add('hidden'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('section-' + name).classList.remove('hidden');
+  if (el) el.classList.add('active');
+  return false;
+}
+function filterDoctors(cat, btn) {
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.doctor-card').forEach(card => {
+    card.style.display = (cat === 'all' || card.dataset.category === cat) ? '' : 'none';
+  });
+}
+function filterAndSwitch(cat) {
+  showSection('doctors', document.querySelector('.nav-item'));
+  const pill = [...document.querySelectorAll('.pill')].find(p => p.textContent.trim().toLowerCase().includes(cat));
+  if (pill) filterDoctors(cat, pill);
+}
+</script>
+</body>
+</html>

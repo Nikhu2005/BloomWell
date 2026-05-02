@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Chat with {{ doctor.name }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+</head>
+<body class="chat-page">
+
+<div class="chat-layout">
+
+  <!-- Chat Header -->
+  <header class="chat-header">
+    <a href="/dashboard" class="back-btn">← Back</a>
+    <div class="chat-doctor-info">
+      <div class="chat-doc-avatar" style="background:{{ doctor.avatar_color }}">
+        {{ doctor.name.split()[1][0] }}{{ doctor.name.split()[2][0] if doctor.name.split()|length > 2 else '' }}
+      </div>
+      <div>
+        <div class="chat-doc-name">{{ doctor.name }}</div>
+        <div class="chat-doc-spec">{{ doctor.specialty }}</div>
+      </div>
+    </div>
+    <div class="chat-header-badges">
+      <span class="badge-secure">🔒 Encrypted</span>
+      <div class="availability avail-yes">● Online</div>
+    </div>
+  </header>
+
+  <!-- Disclaimer Banner -->
+  <div class="chat-disclaimer">
+    <span>🌸</span>
+    This is a safe, anonymous space. Everything shared here stays private. For emergencies, please call 112.
+  </div>
+
+  <!-- Messages Area -->
+  <div class="messages-area" id="messages-area">
+
+    <!-- Welcome message -->
+    <div class="msg-system">
+      Consultation started with {{ doctor.name }} · {{ doctor.specialty }}
+    </div>
+
+    {% for msg in messages %}
+    <div class="msg-wrapper {% if msg.sender == 'user' %}msg-user{% else %}msg-doctor{% endif %}">
+      {% if msg.sender == 'doctor' %}
+      <div class="msg-avatar" style="background:{{ doctor.avatar_color }}">
+        {{ doctor.name.split()[1][0] }}
+      </div>
+      {% endif %}
+      <div class="msg-bubble">
+        <div class="msg-text">{{ msg.content }}</div>
+        <div class="msg-time">{{ msg.timestamp.strftime('%I:%M %p') }}</div>
+      </div>
+      {% if msg.sender == 'user' %}
+      <div class="msg-avatar user-avatar-chat">
+        {{ username[0].upper() }}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    {% if not messages %}
+    <div class="chat-empty">
+      <div class="chat-empty-icon">💬</div>
+      <p>Send your first message. You're in a safe, private space.</p>
+      <div class="quick-prompts">
+        <button class="quick-btn" onclick="fillPrompt('I have a question about my menstrual cycle')">Menstrual question</button>
+        <button class="quick-btn" onclick="fillPrompt('I\'ve been feeling anxious lately and need guidance')">Anxiety support</button>
+        <button class="quick-btn" onclick="fillPrompt('I have a general health concern I\'d like to discuss')">General question</button>
+      </div>
+    </div>
+    {% endif %}
+
+    <div id="typing-indicator" class="typing-indicator hidden">
+      <div class="msg-avatar" style="background:{{ doctor.avatar_color }}">{{ doctor.name.split()[1][0] }}</div>
+      <div class="typing-bubble"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+
+  <!-- Input Area -->
+  <footer class="chat-input-area">
+    <div class="input-row">
+      <textarea id="msg-input" placeholder="Type your message… this is a safe space 🌸"
+                rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button class="send-btn" onclick="sendMessage()" id="send-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <p class="input-note">🔒 Your message is encrypted and anonymous</p>
+  </footer>
+
+</div>
+
+<script>
+const ROOM_ID = "{{ room_id }}";
+
+function scrollToBottom() {
+  const area = document.getElementById('messages-area');
+  area.scrollTop = area.scrollHeight;
+}
+scrollToBottom();
+
+function fillPrompt(text) {
+  document.getElementById('msg-input').value = text;
+  document.getElementById('msg-input').focus();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+function appendMessage(content, sender, time, avatarColor, initial) {
+  const empty = document.querySelector('.chat-empty');
+  if (empty) empty.remove();
+
+  const area = document.getElementById('messages-area');
+  const typing = document.getElementById('typing-indicator');
+
+  const wrapper = document.createElement('div');
+  wrapper.className = `msg-wrapper ${sender === 'user' ? 'msg-user' : 'msg-doctor'}`;
+
+  if (sender === 'doctor') {
+    wrapper.innerHTML = `
+      <div class="msg-avatar" style="background:${avatarColor}">${initial}</div>
+      <div class="msg-bubble">
+        <div class="msg-text">${content}</div>
+        <div class="msg-time">${time}</div>
+      </div>`;
+  } else {
+    wrapper.innerHTML = `
+      <div class="msg-bubble">
+        <div class="msg-text">${content}</div>
+        <div class="msg-time">${time}</div>
+      </div>
+      <div class="msg-avatar user-avatar-chat">{{ username[0].upper() }}</div>`;
+  }
+
+  area.insertBefore(wrapper, typing);
+  scrollToBottom();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('msg-input');
+  const content = input.value.trim();
+  if (!content) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('send-btn').disabled = true;
+
+  const time = new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
+  appendMessage(content, 'user', time, '', '');
+
+  // show typing
+  const typing = document.getElementById('typing-indicator');
+  typing.classList.remove('hidden');
+  scrollToBottom();
+
+  try {
+    const res  = await fetch('/send_message', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({room_id: ROOM_ID, content})
+    });
+    const data = await res.json();
+
+    await new Promise(r => setTimeout(r, 1200));
+    typing.classList.add('hidden');
+
+    appendMessage(
+      data.doctor_msg.content, 'doctor', data.doctor_msg.time,
+      "{{ doctor.avatar_color }}", "{{ doctor.name.split()[1][0] }}"
+    );
+  } catch(e) {
+    typing.classList.add('hidden');
+    appendMessage('Connection issue. Please try again.', 'doctor', time, '#eee', '!');
+  }
+
+  document.getElementById('send-btn').disabled = false;
+}
+</script>
+</body>
+</html>
