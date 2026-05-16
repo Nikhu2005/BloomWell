@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bloom — Verify Email</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 50%, #e8eaf6 100%);
+      font-family: 'Segoe UI', system-ui, sans-serif;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 2.5rem 2rem;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 8px 40px rgba(180, 120, 160, 0.15);
+      text-align: center;
+    }
+
+    .logo {
+      font-size: 2rem;
+      margin-bottom: .25rem;
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      color: #4a2c40;
+      margin-bottom: .4rem;
+    }
+
+    .subtitle {
+      font-size: .875rem;
+      color: #888;
+      margin-bottom: .25rem;
+    }
+
+    .email-badge {
+      display: inline-block;
+      background: #fce4ec;
+      color: #c2185b;
+      border-radius: 20px;
+      padding: .2rem .75rem;
+      font-size: .8rem;
+      font-weight: 600;
+      margin: .5rem 0 1.5rem;
+    }
+
+    /* ── OTP boxes ── */
+    .otp-row {
+      display: flex;
+      gap: .6rem;
+      justify-content: center;
+      margin-bottom: 1.25rem;
+    }
+
+    .otp-row input {
+      width: 48px;
+      height: 56px;
+      border: 2px solid #e0c8d8;
+      border-radius: 12px;
+      font-size: 1.4rem;
+      font-weight: 700;
+      text-align: center;
+      color: #4a2c40;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+      -moz-appearance: textfield;
+    }
+    .otp-row input::-webkit-outer-spin-button,
+    .otp-row input::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .otp-row input:focus {
+      border-color: #e91e8c;
+      box-shadow: 0 0 0 3px rgba(233, 30, 140, .12);
+    }
+    .otp-row input.filled {
+      border-color: #c2185b;
+      background: #fce4ec;
+    }
+
+    /* ── Error ── */
+    .error-box {
+      background: #fde8e8;
+      color: #c0392b;
+      border-radius: 10px;
+      padding: .65rem 1rem;
+      font-size: .85rem;
+      margin-bottom: 1rem;
+    }
+
+    /* ── Submit button ── */
+    .btn-verify {
+      width: 100%;
+      padding: .85rem;
+      background: linear-gradient(135deg, #e91e8c, #c2185b);
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .15s;
+      margin-bottom: 1.25rem;
+    }
+    .btn-verify:hover  { opacity: .92; }
+    .btn-verify:active { transform: scale(.98); }
+    .btn-verify:disabled { opacity: .55; cursor: not-allowed; }
+
+    /* ── Resend / timer ── */
+    .resend-row {
+      font-size: .85rem;
+      color: #888;
+    }
+    #resend-btn {
+      background: none;
+      border: none;
+      color: #e91e8c;
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0;
+      font-size: .85rem;
+    }
+    #resend-btn:disabled { color: #bbb; cursor: default; }
+    #timer { font-weight: 600; color: #c2185b; }
+
+    .back-link {
+      display: block;
+      margin-top: 1.25rem;
+      font-size: .8rem;
+      color: #aaa;
+      text-decoration: none;
+    }
+    .back-link:hover { color: #c2185b; }
+
+    /* ── Success flash ── */
+    .toast {
+      position: fixed;
+      bottom: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: #2e7d32;
+      color: #fff;
+      padding: .6rem 1.2rem;
+      border-radius: 30px;
+      font-size: .85rem;
+      opacity: 0;
+      transition: all .35s ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+
+<div class="card">
+  <div class="logo">🌸</div>
+  <h1>Check your email</h1>
+  <p class="subtitle">We sent a {{ otp_length or 6 }}-digit code to</p>
+  <span class="email-badge">{{ email }}</span>
+
+  {% if error %}
+  <div class="error-box">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" action="{{ url_for('verify_otp_page') }}" id="otp-form" autocomplete="off">
+    <div class="otp-row" id="otp-boxes">
+      {% for i in range(1, 7) %}
+      <input type="text" name="otp{{ i }}" id="otp{{ i }}"
+             maxlength="1" inputmode="numeric" pattern="[0-9]"
+             aria-label="Digit {{ i }}" required />
+      {% endfor %}
+    </div>
+
+    <button type="submit" class="btn-verify" id="verify-btn">Verify &amp; Continue →</button>
+  </form>
+
+  <div class="resend-row">
+    Didn't receive it?&nbsp;
+    <button id="resend-btn" disabled>Resend code</button>
+    &nbsp;in <span id="timer">2:00</span>
+  </div>
+
+  <a href="{{ url_for('login') }}" class="back-link">← Back to login</a>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ── Box-to-box auto-focus & paste support ──────────────────────────────────
+  const boxes = document.querySelectorAll('.otp-row input');
+
+  boxes.forEach((box, idx) => {
+    box.addEventListener('input', e => {
+      box.value = box.value.replace(/\D/g, '').slice(-1);
+      box.classList.toggle('filled', box.value !== '');
+      if (box.value && idx < boxes.length - 1) boxes[idx + 1].focus();
+    });
+
+    box.addEventListener('keydown', e => {
+      if (e.key === 'Backspace' && !box.value && idx > 0) boxes[idx - 1].focus();
+      if (e.key === 'ArrowLeft'  && idx > 0) boxes[idx - 1].focus();
+      if (e.key === 'ArrowRight' && idx < boxes.length - 1) boxes[idx + 1].focus();
+    });
+
+    box.addEventListener('paste', e => {
+      e.preventDefault();
+      const digits = (e.clipboardData.getData('text') || '').replace(/\D/g, '');
+      digits.split('').slice(0, 6).forEach((d, i) => {
+        if (boxes[idx + i]) {
+          boxes[idx + i].value = d;
+          boxes[idx + i].classList.add('filled');
+        }
+      });
+      const next = Math.min(idx + digits.length, boxes.length - 1);
+      boxes[next].focus();
+    });
+  });
+
+  boxes[0].focus();
+
+  // ── Countdown & Resend ────────────────────────────────────────────────────
+  const resendBtn = document.getElementById('resend-btn');
+  const timerEl   = document.getElementById('timer');
+  let   seconds   = 120;
+
+  function tick() {
+    const m = String(Math.floor(seconds / 60)).padStart(1, '0');
+    const s = String(seconds % 60).padStart(2, '0');
+    timerEl.textContent = `${m}:${s}`;
+    if (seconds <= 0) {
+      resendBtn.disabled  = false;
+      timerEl.textContent = '';
+      timerEl.previousSibling.textContent = '';   // hide "in"
+      return;
+    }
+    seconds--;
+    setTimeout(tick, 1000);
+  }
+  tick();
+
+  resendBtn.addEventListener('click', async () => {
+    resendBtn.disabled = true;
+    timerEl.textContent = '…';
+    try {
+      const res  = await fetch("{{ url_for('resend_otp') }}", { method: 'POST' });
+      const data = await res.json();
+      showToast(data.message || 'Code resent!');
+    } catch {
+      showToast('Failed to resend. Try again.');
+    }
+    // Reset timer
+    seconds = 120;
+    tick();
+  });
+
+  // ── Toast helper ──────────────────────────────────────────────────────────
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+</script>
+</body>
+</html>

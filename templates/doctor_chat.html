@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Chat with {{ user.username }}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+#incoming-call{position:fixed;top:20px;right:20px;background:#fff;border-radius:16px;padding:20px 24px;box-shadow:0 8px 40px rgba(0,0,0,.15);z-index:999;display:none;min-width:300px;border:2px solid rgba(122,158,138,.3);animation:slideIn .3s ease-out}
+#incoming-call.show{display:block}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.ic-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ic-icon{font-size:28px;animation:ring .5s ease-in-out infinite alternate}
+@keyframes ring{from{transform:rotate(-10deg)}to{transform:rotate(10deg)}}
+.ic-title{font-size:15px;font-weight:500;color:#2d2228}
+.ic-sub{font-size:12px;color:#8a7a80;margin-top:2px}
+.ic-actions{display:flex;gap:8px}
+.ic-accept{flex:1;padding:10px;background:#7a9e8a;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500;font-family:'DM Sans',sans-serif}
+.ic-accept:hover{background:#6a8e7a}
+.ic-decline{flex:1;padding:10px;background:rgba(200,116,138,.1);color:#c8748a;border:1px solid rgba(200,116,138,.3);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.video-call-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(122,158,138,.12);border:1px solid rgba(122,158,138,.3);color:#7a9e8a;border-radius:20px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;text-decoration:none}
+.video-call-btn:hover{background:rgba(122,158,138,.2)}
+#status-toast{position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(8px);background:#2d2228;color:#fff;padding:8px 18px;border-radius:8px;font-size:12px;opacity:0;transition:all .25s;pointer-events:none;z-index:888}
+#status-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body class="chat-page">
+
+<div id="incoming-call">
+  <div class="ic-header">
+    <div class="ic-icon">📹</div>
+    <div>
+      <div class="ic-title" id="ic-patient-name">Patient requesting video call</div>
+      <div class="ic-sub">Tap accept to start consultation</div>
+    </div>
+  </div>
+  <div class="ic-actions">
+    <button class="ic-accept" id="ic-accept-btn">✓ Accept</button>
+    <button class="ic-decline" id="ic-decline-btn">✗ Decline</button>
+  </div>
+</div>
+<div id="status-toast"></div>
+
+<div class="chat-layout">
+  <header class="chat-header">
+    <a href="/doctor/dashboard" class="back-btn">← Dashboard</a>
+    <div class="chat-doctor-info">
+      <div class="chat-doc-avatar" style="background:#b5c9a8">{{ user.username[0].upper() }}</div>
+      <div>
+        <div class="chat-doc-name">{{ user.username }}{% if user.anonymous %} <span style="font-size:10px;opacity:.6">(anon)</span>{% endif %}</div>
+        <div class="chat-doc-spec">Patient</div>
+      </div>
+    </div>
+    <div class="chat-header-badges">
+      <a class="video-call-btn" href="/video/{{ room_id }}">📹 Start Video</a>
+      <span class="badge-secure">🔒 Encrypted</span>
+      <div class="availability avail-yes" id="connection-status">● Connected</div>
+    </div>
+  </header>
+
+  <div class="chat-disclaimer">
+    <span>🩺</span>
+    You are responding as <strong>{{ doctor.name }}</strong>. Messages are end-to-end encrypted.
+  </div>
+
+  <div class="messages-area" id="messages-area">
+    <div class="msg-system">Consultation with {{ user.username }}</div>
+    {% for msg in messages %}
+    <div class="msg-wrapper {% if msg.sender == 'doctor' %}msg-user{% else %}msg-doctor{% endif %}">
+      {% if msg.sender == 'user' %}
+      <div class="msg-avatar" style="background:#b5c9a8">{{ user.username[0].upper() }}</div>
+      {% endif %}
+      <div class="msg-bubble">
+        <div class="msg-text">{% if msg.is_encrypted %}🔒 Encrypted{% else %}{{ msg.content }}{% endif %}</div>
+        <div class="msg-time">{{ msg.timestamp.strftime('%I:%M %p') }}</div>
+      </div>
+      {% if msg.sender == 'doctor' %}
+      <div class="msg-avatar user-avatar-chat" style="background:{{ doctor.avatar_color }}">{{ doctor.name.split()[1][0] }}</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% if not messages %}
+    <div class="chat-empty"><div class="chat-empty-icon">💬</div><p>No messages yet.</p></div>
+    {% endif %}
+    <div id="typing-indicator" class="typing-indicator hidden">
+      <div class="msg-avatar" style="background:#b5c9a8">{{ user.username[0].upper() }}</div>
+      <div class="typing-bubble"><span></span><span></span><span></span></div>
+    </div>
+  </div>
+
+  <footer class="chat-input-area">
+    <div class="input-row">
+      <textarea id="msg-input" placeholder="Type your response…" rows="1"
+                onkeydown="handleKey(event)" oninput="autoResize(this);sendTyping(true)"></textarea>
+      <button class="send-btn" onclick="sendMessage()" id="send-btn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <p class="input-note">🔒 End-to-end encrypted</p>
+  </footer>
+</div>
+
+<script>
+const ROOM_ID="{{room_id}}",DOC_INIT="{{doctor.name.split()[1][0]}}",DOC_COLOR="{{doctor.avatar_color}}",USR_INIT="{{user.username[0].upper()}}";
+const MY_ROLE='doctor';
+let pendingCallId=null;
+const socket=io();
+socket.on('connect',()=>socket.emit('join_chat',{room_id:ROOM_ID}));
+socket.on('new_message',d=>{
+  // Skip own echoes — already shown via optimistic render in sendMessage()
+  if(d.sender===MY_ROLE) return;
+  appendMessage(d.content,'patient',d.timestamp,'#b5c9a8',USR_INIT);
+});
+socket.on('peer_typing',d=>{if(d.role==='user')document.getElementById('typing-indicator').classList.toggle('hidden',!d.typing);});
+socket.on('incoming_call_request',d=>{
+  pendingCallId=d.call_id;
+  document.getElementById('ic-patient-name').textContent=d.patient+' is requesting a video call';
+  document.getElementById('incoming-call').classList.add('show');
+  document.getElementById('ic-accept-btn').onclick=()=>{
+    socket.emit('accept_call',{call_id:pendingCallId});
+    document.getElementById('incoming-call').classList.remove('show');
+    window.location.href='/video/'+d.room_id;
+  };
+  document.getElementById('ic-decline-btn').onclick=()=>{
+    socket.emit('decline_call',{call_id:pendingCallId});
+    document.getElementById('incoming-call').classList.remove('show');
+    showToast('Call declined');
+  };
+  setTimeout(()=>{if(document.getElementById('incoming-call').classList.contains('show')){socket.emit('decline_call',{call_id:pendingCallId});document.getElementById('incoming-call').classList.remove('show');}},30000);
+});
+socket.on('new_appointment_request',d=>showToast('📅 Appointment request from '+d.patient+' — '+d.datetime));
+function scrollToBottom(){document.getElementById('messages-area').scrollTop=9999;}
+scrollToBottom();
+function handleKey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}}
+function autoResize(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,120)+'px';}
+let tt;function sendTyping(v){socket.emit('typing',{room_id:ROOM_ID,typing:v});clearTimeout(tt);if(v)tt=setTimeout(()=>socket.emit('typing',{room_id:ROOM_ID,typing:false}),2000);}
+function appendMessage(content,role,time,color,initial){
+  document.querySelector('.chat-empty')?.remove();
+  const area=document.getElementById('messages-area'),typing=document.getElementById('typing-indicator'),wrap=document.createElement('div');
+  wrap.className='msg-wrapper '+(role==='doctor'?'msg-user':'msg-doctor');
+  if(role==='doctor')wrap.innerHTML='<div class="msg-bubble"><div class="msg-text">'+content+'</div><div class="msg-time">'+time+'</div></div><div class="msg-avatar user-avatar-chat" style="background:'+color+'">'+initial+'</div>';
+  else wrap.innerHTML='<div class="msg-avatar" style="background:'+color+'">'+initial+'</div><div class="msg-bubble"><div class="msg-text">'+content+'</div><div class="msg-time">'+time+'</div></div>';
+  area.insertBefore(wrap,typing);scrollToBottom();
+}
+function sendMessage(){
+  const input=document.getElementById('msg-input'),text=input.value.trim();
+  if(!text)return;
+  const time=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  appendMessage(text,'doctor',time,DOC_COLOR,DOC_INIT);
+  input.value='';input.style.height='auto';sendTyping(false);
+  socket.emit('send_message',{room_id:ROOM_ID,content:text,is_encrypted:false});
+}
+function showToast(msg){const t=document.getElementById('status-toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),4000);}
+</script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Doctor Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--rose:#c8748a;--sage:#7a9e8a;--cream:#fdf8f4;--dark:#2d2228;--muted:#8a7a80;--border:#e8ddd8;--surface:#fff;--sidebar-w:260px;--success:#5a9e6a;--warn:#c8a45a;}
+body{background:var(--cream);font-family:'DM Sans',sans-serif;color:var(--dark);min-height:100vh;display:flex}
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh;z-index:100}
+.sidebar-brand{padding:24px 20px 16px;border-bottom:1px solid var(--border)}
+.sidebar-brand h1{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300}
+.sidebar-brand h1 span{color:var(--rose)}
+.sidebar-brand p{font-size:11px;color:var(--muted);margin-top:2px}
+.doctor-card{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
+.doc-avatar{width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;font-weight:600;color:#fff;flex-shrink:0}
+.doc-info h3{font-size:13px;font-weight:500}
+.doc-info p{font-size:11px;color:var(--muted)}
+.avail-toggle{margin-top:6px;display:flex;align-items:center;gap:8px;cursor:pointer}
+.avail-dot{width:8px;height:8px;border-radius:50%;background:#ccc;transition:background .2s}
+.avail-dot.online{background:var(--success);box-shadow:0 0 6px var(--success)}
+.avail-label{font-size:11px;color:var(--muted)}
+.nav{padding:12px;flex:1;overflow-y:auto}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px;color:var(--muted);transition:all .15s;text-decoration:none;margin-bottom:2px}
+.nav-item:hover{background:rgba(200,116,138,.06);color:var(--dark)}
+.nav-item.active{background:rgba(200,116,138,.1);color:var(--rose);font-weight:500}
+.nav-item .icon{font-size:16px;width:20px;text-align:center}
+.nav-section{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:12px 12px 4px}
+.badge-count{display:inline-block;background:var(--rose);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:auto}
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border)}
+.logout-btn{display:block;text-align:center;padding:10px;background:rgba(200,116,138,.08);color:var(--rose);border-radius:8px;text-decoration:none;font-size:13px}
+.logout-btn:hover{background:rgba(200,116,138,.15)}
+.main{margin-left:var(--sidebar-w);flex:1;padding:32px;min-height:100vh}
+.page{display:none}.page.active{display:block}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:28px}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;text-align:center}
+.stat-card .num{font-family:'Cormorant Garamond',serif;font-size:36px;font-weight:300;color:var(--rose)}
+.stat-card .lbl{font-size:12px;color:var(--muted);margin-top:2px}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.section-header h2{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300}
+.chat-list{display:flex;flex-direction:column;gap:10px}
+.chat-item{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all .15s;text-decoration:none;color:inherit}
+.chat-item:hover{border-color:var(--rose);box-shadow:0 2px 12px rgba(200,116,138,.1)}
+.chat-item .avatar{width:42px;height:42px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:18px;color:var(--muted);flex-shrink:0}
+.chat-item .info{flex:1;min-width:0}
+.chat-item .name{font-size:14px;font-weight:500}
+.chat-item .preview{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.chat-item .meta{text-align:right;flex-shrink:0}
+.chat-item .time{font-size:11px;color:var(--muted)}
+.new-badge{display:inline-block;background:var(--rose);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px;margin-top:4px}
+.empty-state{text-align:center;padding:60px 20px;color:var(--muted)}
+.empty-state .icon{font-size:40px;margin-bottom:12px}
+.empty-state p{font-size:14px}
+.appt-list{display:flex;flex-direction:column;gap:10px}
+.appt-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:16px}
+.appt-date{text-align:center;min-width:52px}
+.appt-date .day{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;color:var(--rose);line-height:1}
+.appt-date .mon{font-size:11px;color:var(--muted);text-transform:uppercase}
+.appt-info{flex:1}
+.appt-info .patient{font-size:14px;font-weight:500}
+.appt-info .note{font-size:12px;color:var(--muted);margin-top:2px}
+.appt-info .time{font-size:12px;color:var(--sage);margin-top:2px}
+.appt-status{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:500}
+.status-pending{background:rgba(200,164,90,.1);color:var(--warn)}
+.status-confirmed{background:rgba(90,158,106,.1);color:var(--success)}
+.status-cancelled{background:rgba(200,90,90,.1);color:#c85a5a}
+.appt-actions{display:flex;gap:6px}
+.appt-btn{padding:5px 12px;border:1px solid var(--border);border-radius:6px;font-size:11px;cursor:pointer;background:#fff;transition:all .15s}
+.appt-btn.confirm{border-color:var(--success);color:var(--success)}
+.appt-btn.confirm:hover{background:var(--success);color:#fff}
+.appt-btn.cancel{border-color:#c85a5a;color:#c85a5a}
+.appt-btn.cancel:hover{background:#c85a5a;color:#fff}
+.profile-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:560px}
+.profile-avatar{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:32px;color:#fff;margin-bottom:20px}
+.profile-name{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300}
+.profile-spec{color:var(--muted);font-size:14px;margin-top:4px}
+.profile-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin:24px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:20px 0}
+.profile-stat{text-align:center}
+.profile-stat .val{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;color:var(--rose)}
+.profile-stat .key{font-size:11px;color:var(--muted)}
+.stars{color:#e8b84a;font-size:18px;letter-spacing:2px}
+/* Pending calls */
+.call-card{background:linear-gradient(135deg,rgba(122,158,138,.08),rgba(122,158,138,.04));border:1px solid rgba(122,158,138,.25);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:10px}
+.call-card .call-icon{font-size:28px;animation:ring .6s ease-in-out infinite alternate}
+@keyframes ring{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+.call-card .call-info{flex:1}
+.call-card .call-name{font-size:14px;font-weight:500}
+.call-card .call-time{font-size:11px;color:var(--muted);margin-top:2px}
+.call-accept-btn{padding:8px 16px;background:var(--sage);color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500;text-decoration:none;display:inline-block}
+.call-accept-btn:hover{background:#6a8e7a}
+.call-decline-btn{padding:8px 16px;background:rgba(200,116,138,.1);color:var(--rose);border:1px solid rgba(200,116,138,.3);border-radius:8px;font-size:12px;cursor:pointer;margin-left:6px}
+#toast{position:fixed;bottom:24px;right:24px;background:var(--dark);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:999}
+#toast.show{opacity:1;transform:translateY(0)}
+/* Incoming call popup */
+#incoming-call{position:fixed;top:20px;right:20px;background:#fff;border-radius:16px;padding:20px 24px;box-shadow:0 8px 40px rgba(0,0,0,.15);z-index:9999;display:none;min-width:300px;border:2px solid rgba(122,158,138,.3)}
+#incoming-call.show{display:block;animation:slideIn .3s ease-out}
+@keyframes slideIn{from{transform:translateY(-20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.ic-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ic-icon{font-size:28px;animation:ring .5s ease-in-out infinite alternate}
+.ic-title{font-size:15px;font-weight:500;color:#2d2228}
+.ic-sub{font-size:12px;color:#8a7a80;margin-top:2px}
+.ic-actions{display:flex;gap:8px}
+.ic-accept{flex:1;padding:10px;background:#7a9e8a;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:500;font-family:'DM Sans',sans-serif}
+.ic-decline{flex:1;padding:10px;background:rgba(200,116,138,.1);color:#c8748a;border:1px solid rgba(200,116,138,.3);border-radius:8px;font-size:13px;cursor:pointer;font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+
+<!-- Incoming call popup (for real-time notifications on dashboard) -->
+<div id="incoming-call">
+  <div class="ic-header">
+    <div class="ic-icon">📹</div>
+    <div>
+      <div class="ic-title" id="ic-title">Incoming video call</div>
+      <div class="ic-sub">Tap accept to start consultation</div>
+    </div>
+  </div>
+  <div class="ic-actions">
+    <button class="ic-accept" id="ic-accept-btn">✓ Accept</button>
+    <button class="ic-decline" id="ic-decline-btn">✗ Decline</button>
+  </div>
+</div>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <h1>Bloom<span>Well</span></h1>
+    <p>Doctor Portal</p>
+  </div>
+  <div class="doctor-card">
+    <div class="doc-avatar" style="background:{{ doctor.avatar_color }}">
+      {{ doctor.name.split()[1][0] }}{{ doctor.name.split()[2][0] if doctor.name.split()|length > 2 else '' }}
+    </div>
+    <div class="doc-info">
+      <h3>{{ doctor.name }}</h3>
+      <p>{{ doctor.specialty }}</p>
+      <div class="avail-toggle" onclick="toggleAvailability()">
+        <div class="avail-dot {% if doctor.available %}online{% endif %}" id="avail-dot"></div>
+        <span class="avail-label" id="avail-label">{% if doctor.available %}Available{% else %}Offline{% endif %}</span>
+      </div>
+    </div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">Main</div>
+    <a class="nav-item active" onclick="showPage('chats',this)" href="#">
+      <span class="icon">💬</span> Patient Chats
+      {% if chats %}<span class="badge-count">{{ chats|length }}</span>{% endif %}
+    </a>
+    <a class="nav-item" onclick="showPage('calls',this)" href="#">
+      <span class="icon">📹</span> Video Requests
+      {% if pending_calls %}<span class="badge-count">{{ pending_calls|length }}</span>{% endif %}
+    </a>
+    <a class="nav-item" onclick="showPage('appointments',this)" href="#">
+      <span class="icon">📅</span> Appointments
+    </a>
+    <div class="nav-section">Account</div>
+    <a class="nav-item" onclick="showPage('profile',this)" href="#">
+      <span class="icon">👤</span> My Profile
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <a href="/doctor/logout" class="logout-btn">Sign Out</a>
+  </div>
+</aside>
+
+<main class="main">
+
+  <!-- Chats -->
+  <div class="page active" id="page-chats">
+    <div class="stats-row">
+      <div class="stat-card"><div class="num">{{ chats|length }}</div><div class="lbl">Active Patients</div></div>
+      <div class="stat-card"><div class="num">{{ appointments|length }}</div><div class="lbl">Appointments</div></div>
+      <div class="stat-card"><div class="num">{{ doctor.rating }}</div><div class="lbl">Rating</div></div>
+      <div class="stat-card"><div class="num">{{ doctor.experience }}</div><div class="lbl">Years Exp.</div></div>
+    </div>
+    <div class="section-header"><h2>Patient Consultations</h2></div>
+    <div class="chat-list">
+      {% if chats %}
+        {% for item in chats %}
+        <a href="/doctor/chat/{{ item.room_id }}" class="chat-item">
+          <div class="avatar">{{ item.user.username[0].upper() }}</div>
+          <div class="info">
+            <div class="name">{{ item.user.username }}{% if item.user.anonymous %} <span style="font-size:10px;color:var(--muted)">(anon)</span>{% endif %}</div>
+            <div class="preview">{% if item.last_msg.is_encrypted %}🔒 Encrypted message{% else %}{{ item.last_msg.content[:60] }}{% endif %}</div>
+            {% if item.period_logs %}
+            <div style="margin-top:8px;padding:8px;background:rgba(200,116,138,.08);border-radius:6px;font-size:11px;color:var(--muted)">
+              📊 Period: <strong>{{ item.period_logs[0].start_date.strftime('%b %d') }}</strong>
+              {% if item.period_logs[0].flow %} • Flow: {{ item.period_logs[0].flow }}{% endif %}
+              {% if item.period_logs[0].symptoms %} • {{ item.period_logs[0].symptoms[:20] }}...{% endif %}
+            </div>
+            {% endif %}
+          </div>
+          <div class="meta">
+            <div class="time">{{ item.last_msg.timestamp.strftime('%I:%M %p') }}</div>
+            {% if item.last_msg.sender == 'user' %}<div class="new-badge">New</div>{% endif %}
+          </div>
+        </a>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state"><div class="icon">🌸</div><p>No patient consultations yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Video Requests -->
+  <div class="page" id="page-calls">
+    <div class="section-header"><h2>Video Call Requests</h2></div>
+    {% if pending_calls %}
+      {% for call in pending_calls %}
+      <div class="call-card" id="call-card-{{ call.id }}">
+        <div class="call-icon">📹</div>
+        <div class="call-info">
+          <div class="call-name">{{ call.patient.username }}</div>
+          <div class="call-time">Requested {{ call.created_at.strftime('%b %d at %I:%M %p') }}</div>
+        </div>
+        <a class="call-accept-btn" href="/video/{{ call.room_id }}"
+           onclick="acceptCallAndGo({{ call.id }}, '{{ call.room_id }}'); return false;">✓ Accept & Join</a>
+        <button class="call-decline-btn" onclick="declineCall({{ call.id }})">✗ Decline</button>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state"><div class="icon">📹</div><p>No pending video call requests.</p></div>
+    {% endif %}
+  </div>
+
+  <!-- Appointments -->
+  <div class="page" id="page-appointments">
+    <div class="section-header"><h2>Appointment Schedule</h2></div>
+    <div class="appt-list">
+      {% if appointments %}
+        {% for appt in appointments %}
+        <div class="appt-card" id="appt-{{ appt.id }}">
+          <div class="appt-date">
+            <div class="day">{{ appt.scheduled_at.strftime('%d') }}</div>
+            <div class="mon">{{ appt.scheduled_at.strftime('%b') }}</div>
+          </div>
+          <div class="appt-info">
+            <div class="patient">{{ appt.user.username }}</div>
+            <div class="time">{{ appt.scheduled_at.strftime('%I:%M %p') }}</div>
+            {% if appt.note %}<div class="note">{{ appt.note }}</div>{% endif %}
+          </div>
+          <span class="appt-status status-{{ appt.status }}" id="status-{{ appt.id }}">{{ appt.status.title() }}</span>
+          {% if appt.status == 'pending' %}
+          <div class="appt-actions">
+            <button class="appt-btn confirm" onclick="updateAppt({{ appt.id }},'confirmed')">✓</button>
+            <button class="appt-btn cancel" onclick="updateAppt({{ appt.id }},'cancelled')">✗</button>
+          </div>
+          {% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state"><div class="icon">📅</div><p>No appointments yet.</p></div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Profile -->
+  <div class="page" id="page-profile">
+    <div class="profile-card">
+      <div class="profile-avatar" style="background:{{ doctor.avatar_color }}">
+        {{ doctor.name.split()[1][0] }}{{ doctor.name.split()[2][0] if doctor.name.split()|length > 2 else '' }}
+      </div>
+      <div class="profile-name">{{ doctor.name }}</div>
+      <div class="profile-spec">{{ doctor.specialty }}</div>
+      <div class="profile-stats">
+        <div class="profile-stat"><div class="val">{{ doctor.rating }}</div><div class="key">Rating</div></div>
+        <div class="profile-stat"><div class="val">{{ doctor.experience }}</div><div class="key">Years Exp.</div></div>
+        <div class="profile-stat"><div class="val">{{ doctor.total_ratings }}</div><div class="key">Reviews</div></div>
+      </div>
+      <div class="stars">{% for i in range(doctor.rating|int) %}★{% endfor %}{% for i in range(5-(doctor.rating|int)) %}☆{% endfor %}</div>
+      <p style="margin-top:16px;font-size:13px;color:var(--muted)">Email: <strong>{{ doctor.email }}</strong></p>
+      <p style="margin-top:6px;font-size:13px;color:var(--muted)">Category: <strong>{{ doctor.category.title() }}</strong></p>
+    </div>
+  </div>
+
+</main>
+<div id="toast"></div>
+
+<script>
+const socket = io();
+socket.on('connect', () => {});
+socket.on('incoming_call_request', (data) => {
+  let pendingId = data.call_id;
+  document.getElementById('ic-title').textContent = data.patient + ' is requesting a video call';
+  document.getElementById('incoming-call').classList.add('show');
+  document.getElementById('ic-accept-btn').onclick = () => {
+    socket.emit('accept_call', {call_id: pendingId});
+    document.getElementById('incoming-call').classList.remove('show');
+    window.location.href = '/video/' + data.room_id;
+  };
+  document.getElementById('ic-decline-btn').onclick = () => {
+    socket.emit('decline_call', {call_id: pendingId});
+    document.getElementById('incoming-call').classList.remove('show');
+    toast('Call declined');
+  };
+});
+socket.on('new_appointment_request', (data) => {
+  toast('📅 New appointment from ' + data.patient + ' — ' + data.datetime);
+});
+
+function showPage(name, el) {
+  event.preventDefault();
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.getElementById('page-'+name).classList.add('active');
+  el.classList.add('active');
+}
+
+async function toggleAvailability() {
+  const res=await fetch('/doctor/availability',{method:'POST'}); const data=await res.json();
+  const dot=document.getElementById('avail-dot'),lbl=document.getElementById('avail-label');
+  if(data.available){dot.classList.add('online');lbl.textContent='Available';}
+  else{dot.classList.remove('online');lbl.textContent='Offline';}
+  toast(data.available?'Status: Available':'Status: Offline');
+}
+
+function acceptCallAndGo(callId, roomId) {
+  socket.emit('accept_call', {call_id: callId});
+  window.location.href = '/video/' + roomId;
+}
+
+async function declineCall(callId) {
+  socket.emit('decline_call', {call_id: callId});
+  document.getElementById('call-card-'+callId)?.remove();
+  toast('Call declined');
+}
+
+async function updateAppt(id, status) {
+  const res=await fetch('/doctor/appointment/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});
+  const data=await res.json();
+  const el=document.getElementById('status-'+id);
+  el.textContent=data.status.charAt(0).toUpperCase()+data.status.slice(1);
+  el.className='appt-status status-'+data.status;
+  document.querySelector('#appt-'+id+' .appt-actions')?.remove();
+  toast('Appointment '+data.status);
+}
+
+function toast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+</script>
+</body>
+</html>

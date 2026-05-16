@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LiveWire Chat</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #13161e;
+      --border:    #1f2430;
+      --accent:    #00e5a0;
+      --accent2:   #7b61ff;
+      --danger:    #ff4d6d;
+      --text:      #d4dbe8;
+      --muted:     #5a6478;
+      --self-bg:   #0f2a20;
+      --self-border:#00e5a0;
+      --other-bg:  #161a25;
+      --sys-color: #7b61ff;
+      --radius:    10px;
+      --font-mono: 'JetBrains Mono', monospace;
+      --font-ui:   'Syne', sans-serif;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-ui); overflow: hidden; }
+
+    /* ── LAYOUT ─────────────────────────────────────────────────── */
+    #app {
+      display: grid;
+      grid-template-columns: 220px 1fr 180px;
+      grid-template-rows: 56px 1fr 72px;
+      grid-template-areas:
+        "sidebar header  users"
+        "sidebar messages users"
+        "sidebar input   users";
+      height: 100vh;
+      gap: 0;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────────────── */
+    #header {
+      grid-area: header;
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    #header .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      flex-shrink: 0;
+    }
+    #header h2 { font-size: 15px; font-weight: 600; color: var(--text); }
+    #header .room-tag {
+      font-family: var(--font-mono); font-size: 11px;
+      color: var(--accent); background: rgba(0,229,160,.08);
+      padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(0,229,160,.2);
+    }
+    #typing-indicator {
+      margin-left: auto; font-family: var(--font-mono); font-size: 11px;
+      color: var(--muted); height: 16px; transition: opacity .2s;
+    }
+
+    /* ── SIDEBAR ────────────────────────────────────────────────── */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+    }
+    #sidebar .brand {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    #sidebar .brand h1 {
+      font-size: 18px; font-weight: 800; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    #sidebar .brand p { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    #join-form { padding: 14px; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--border); }
+    #join-form label { font-size: 10px; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    #join-form input {
+      background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-mono); font-size: 12px;
+      padding: 7px 10px; border-radius: 6px; outline: none; width: 100%;
+      transition: border-color .15s;
+    }
+    #join-form input:focus { border-color: var(--accent); }
+
+    .rooms-section { padding: 12px 14px; flex: 1; overflow-y: auto; }
+    .rooms-section h3 { font-size: 10px; font-family: var(--font-mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+    .room-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 10px; border-radius: 6px; cursor: pointer;
+      font-family: var(--font-mono); font-size: 12px; color: var(--muted);
+      transition: all .15s; user-select: none;
+    }
+    .room-item:hover { background: var(--border); color: var(--text); }
+    .room-item.active { background: rgba(0,229,160,.1); color: var(--accent); border: 1px solid rgba(0,229,160,.2); }
+    .room-item::before { content: '#'; opacity: .5; }
+
+    #join-btn {
+      margin: 0 14px 14px; padding: 9px; border: none; border-radius: 7px;
+      background: var(--accent); color: #000; font-family: var(--font-ui);
+      font-size: 12px; font-weight: 700; cursor: pointer; letter-spacing: .3px;
+      transition: opacity .15s, transform .1s;
+    }
+    #join-btn:hover { opacity: .85; }
+    #join-btn:active { transform: scale(.98); }
+
+    /* ── MESSAGES ───────────────────────────────────────────────── */
+    #messages {
+      grid-area: messages;
+      overflow-y: auto; padding: 16px 20px;
+      display: flex; flex-direction: column; gap: 4px;
+      scroll-behavior: smooth;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-track { background: transparent; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .msg {
+      display: flex; flex-direction: column;
+      max-width: 75%; animation: msgIn .15s ease-out;
+      padding: 8px 12px; border-radius: var(--radius);
+      border: 1px solid transparent;
+    }
+    @keyframes msgIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .msg.self { align-self: flex-end; background: var(--self-bg); border-color: rgba(0,229,160,.15); }
+    .msg.other { align-self: flex-start; background: var(--other-bg); border-color: var(--border); }
+    .msg.system {
+      align-self: center; background: transparent; border: none;
+      font-family: var(--font-mono); font-size: 11px; color: var(--sys-color);
+      padding: 4px 0; text-align: center; max-width: 100%;
+    }
+    .msg .meta {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
+    }
+    .msg .meta .uname {
+      font-size: 11px; font-weight: 700; font-family: var(--font-mono);
+    }
+    .msg.self .meta .uname { color: var(--accent); }
+    .msg.other .meta .uname { color: var(--accent2); }
+    .msg .meta .ts { font-size: 10px; color: var(--muted); font-family: var(--font-mono); }
+    .msg .text { font-size: 13.5px; line-height: 1.55; word-break: break-word; }
+
+    /* consecutive same-user grouping */
+    .msg.group-start { border-radius: var(--radius) var(--radius) 4px 4px; }
+    .msg.group-mid   { border-radius: 4px; margin-top: 1px; }
+    .msg.group-end   { border-radius: 4px 4px var(--radius) var(--radius); margin-top: 1px; }
+
+    /* ── INPUT BAR ──────────────────────────────────────────────── */
+    #input-area {
+      grid-area: input;
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+    }
+    #msg-input {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      color: var(--text); font-family: var(--font-mono); font-size: 13px;
+      padding: 10px 14px; border-radius: 8px; outline: none;
+      transition: border-color .15s;
+      resize: none; height: 44px; line-height: 1.4;
+    }
+    #msg-input:focus { border-color: var(--accent); }
+    #msg-input::placeholder { color: var(--muted); }
+    #msg-input:disabled { opacity: .4; cursor: not-allowed; }
+
+    #send-btn {
+      width: 44px; height: 44px; border: none; border-radius: 8px;
+      background: var(--accent); color: #000; font-size: 18px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: opacity .15s, transform .1s; flex-shrink: 0;
+    }
+    #send-btn:hover { opacity: .85; }
+    #send-btn:active { transform: scale(.95); }
+    #send-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+    /* ── USER LIST ──────────────────────────────────────────────── */
+    #user-panel {
+      grid-area: users;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      grid-row: 1 / 4;
+    }
+    #user-panel h3 {
+      padding: 18px 14px 10px;
+      font-size: 10px; font-family: var(--font-mono);
+      color: var(--muted); text-transform: uppercase; letter-spacing: 1px;
+      border-bottom: 1px solid var(--border);
+    }
+    #user-list { overflow-y: auto; flex: 1; padding: 10px; }
+    .user-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px; border-radius: 6px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text);
+      transition: background .1s;
+    }
+    .user-item:hover { background: var(--border); }
+    .user-item .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 6px var(--accent); flex-shrink: 0; }
+    .user-item.is-self { color: var(--accent); }
+
+    /* ── EMPTY STATE ────────────────────────────────────────────── */
+    #empty-state {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      text-align: center; pointer-events: none;
+    }
+    #empty-state p { font-size: 13px; color: var(--muted); font-family: var(--font-mono); }
+    #messages { position: relative; }
+
+    /* ── TOAST ──────────────────────────────────────────────────── */
+    #toast {
+      position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(10px);
+      background: var(--danger); color: #fff;
+      padding: 8px 18px; border-radius: 8px; font-size: 12px; font-family: var(--font-mono);
+      opacity: 0; transition: all .25s; pointer-events: none; z-index: 999;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ── SIDEBAR ──────────────────────────────────────── -->
+  <aside id="sidebar">
+    <div class="brand">
+      <h1>LiveWire</h1>
+      <p>real-time · websockets</p>
+    </div>
+
+    <div id="join-form">
+      <div>
+        <label>Username</label>
+        <input type="text" id="username-input" placeholder="your_handle" maxlength="24" />
+      </div>
+    </div>
+
+    <div class="rooms-section">
+      <h3>Channels</h3>
+      <div id="room-list">
+        {% for room in rooms %}
+        <div class="room-item" data-room="{{ room }}" onclick="selectRoom('{{ room }}')">{{ room }}</div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <button id="join-btn" onclick="joinRoom()">Connect →</button>
+  </aside>
+
+  <!-- ── HEADER ────────────────────────────────────────── -->
+  <div id="header">
+    <div class="status-dot" id="status-dot" style="background:var(--muted);box-shadow:none"></div>
+    <h2 id="header-title">Not connected</h2>
+    <span class="room-tag" id="room-tag" style="display:none"></span>
+    <div id="typing-indicator"></div>
+  </div>
+
+  <!-- ── MESSAGES ─────────────────────────────────────── -->
+  <main id="messages">
+    <div id="empty-state"><p>← join a channel to start chatting</p></div>
+  </main>
+
+  <!-- ── INPUT ─────────────────────────────────────────── -->
+  <div id="input-area">
+    <textarea id="msg-input" placeholder="Message…" disabled></textarea>
+    <button id="send-btn" disabled onclick="sendMessage()">↑</button>
+  </div>
+
+  <!-- ── USER PANEL ─────────────────────────────────────── -->
+  <aside id="user-panel">
+    <h3>Online — <span id="user-count">0</span></h3>
+    <div id="user-list"></div>
+  </aside>
+
+</div>
+<div id="toast"></div>
+
+<script>
+  const socket = io();
+  let currentRoom = null;
+  let myUsername  = null;
+  let typingTimer = null;
+  let isTyping    = false;
+  let typingUsers = new Set();
+  let typingClear = {};
+
+  // ── Room selection ──────────────────────────────────────────────
+  function selectRoom(room) {
+    document.querySelectorAll('.room-item').forEach(el => el.classList.remove('active'));
+    const el = document.querySelector(`.room-item[data-room="${room}"]`);
+    if (el) el.classList.add('active');
+    currentRoom = room;
+  }
+  // Default select first room
+  const firstRoom = document.querySelector('.room-item');
+  if (firstRoom) selectRoom(firstRoom.dataset.room);
+
+  // ── Join ────────────────────────────────────────────────────────
+  function joinRoom() {
+    const username = document.getElementById('username-input').value.trim();
+    if (!username) { showToast('Enter a username first'); return; }
+    if (!currentRoom) { showToast('Select a channel'); return; }
+
+    myUsername = username;
+    socket.emit('join', { username, room: currentRoom });
+  }
+
+  // ── Send message ────────────────────────────────────────────────
+  function sendMessage() {
+    const input = document.getElementById('msg-input');
+    const text  = input.value.trim();
+    if (!text || !currentRoom) return;
+    socket.emit('message', { text });
+    input.value = '';
+    input.style.height = '44px';
+    stopTyping();
+  }
+
+  // ── Typing ──────────────────────────────────────────────────────
+  document.getElementById('msg-input').addEventListener('input', function () {
+    if (!isTyping) { isTyping = true; socket.emit('typing', { is_typing: true }); }
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(stopTyping, 1500);
+    // Auto-resize textarea
+    this.style.height = '44px';
+    this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+  });
+
+  document.getElementById('msg-input').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  function stopTyping() {
+    isTyping = false;
+    socket.emit('typing', { is_typing: false });
+  }
+
+  // ── Socket events ───────────────────────────────────────────────
+  socket.on('joined', ({ room, username }) => {
+    document.getElementById('status-dot').style.cssText = 'background:var(--accent);box-shadow:0 0 8px var(--accent)';
+    document.getElementById('header-title').textContent = `#${room}`;
+    const tag = document.getElementById('room-tag');
+    tag.textContent = username; tag.style.display = '';
+    document.getElementById('msg-input').disabled  = false;
+    document.getElementById('send-btn').disabled   = false;
+    document.getElementById('empty-state').style.display = 'none';
+  });
+
+  socket.on('history', messages => {
+    const container = document.getElementById('messages');
+    container.innerHTML = '<div id="empty-state" style="display:none"></div>';
+    messages.forEach(m => appendMessage(m, false));
+    container.scrollTop = container.scrollHeight;
+  });
+
+  socket.on('message', msg => {
+    appendMessage(msg, true);
+  });
+
+  socket.on('system_message', ({ text, timestamp }) => {
+    const el = document.createElement('div');
+    el.className = 'msg system';
+    el.textContent = `— ${text} — ${timestamp}`;
+    document.getElementById('messages').appendChild(el);
+    scrollToBottom();
+  });
+
+  socket.on('user_list', users => {
+    const list = document.getElementById('user-list');
+    document.getElementById('user-count').textContent = users.length;
+    list.innerHTML = users.map(u =>
+      `<div class="user-item ${u === myUsername ? 'is-self' : ''}">
+        <div class="dot"></div>${u}${u === myUsername ? ' (you)' : ''}
+      </div>`
+    ).join('');
+  });
+
+  socket.on('typing', ({ username, is_typing }) => {
+    clearTimeout(typingClear[username]);
+    if (is_typing) {
+      typingUsers.add(username);
+      typingClear[username] = setTimeout(() => { typingUsers.delete(username); updateTyping(); }, 3000);
+    } else {
+      typingUsers.delete(username);
+    }
+    updateTyping();
+  });
+
+  socket.on('error', ({ message }) => showToast(message));
+
+  // ── Helpers ─────────────────────────────────────────────────────
+  function appendMessage(msg, animate) {
+    const container = document.getElementById('messages');
+    const isSelf = msg.username === myUsername;
+
+    const el = document.createElement('div');
+    el.className = `msg ${isSelf ? 'self' : 'other'}`;
+    if (!animate) el.style.animation = 'none';
+
+    el.innerHTML = `
+      <div class="meta">
+        <span class="uname">${esc(msg.username)}</span>
+        <span class="ts">${msg.timestamp}</span>
+      </div>
+      <div class="text">${esc(msg.text)}</div>`;
+
+    container.appendChild(el);
+    if (animate) scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    const c = document.getElementById('messages');
+    c.scrollTop = c.scrollHeight;
+  }
+
+  function updateTyping() {
+    const el = document.getElementById('typing-indicator');
+    const users = [...typingUsers];
+    if (!users.length) { el.textContent = ''; return; }
+    el.textContent = users.length === 1
+      ? `${users[0]} is typing…`
+      : `${users.slice(0,-1).join(', ')} & ${users.at(-1)} are typing…`;
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  function esc(str) {
+    return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+              .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
+</script>
+</body>
+</html>

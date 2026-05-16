@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Video Consultation</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#000;font-family:'DM Sans',sans-serif;color:#fff;overflow:hidden}
+#video-container{position:relative;width:100vw;height:100vh}
+#remote-video{width:100%;height:100%;object-fit:cover;background:#111;display:block}
+#local-video{position:absolute;bottom:120px;right:24px;width:200px;height:150px;object-fit:cover;border-radius:16px;border:2px solid rgba(255,255,255,.15);background:#1a1a2e;box-shadow:0 8px 32px rgba(0,0,0,.5);cursor:move;z-index:10}
+#waiting-screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#0d0f14;z-index:5;transition:opacity .4s}
+#waiting-screen.hidden{opacity:0;pointer-events:none}
+.waiting-avatar{width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:40px;color:#fff;margin-bottom:20px;position:relative}
+.waiting-avatar::after{content:'';position:absolute;inset:-8px;border-radius:50%;border:2px solid rgba(200,116,138,.3);animation:pulse 2s ease-in-out infinite}
+.waiting-avatar::before{content:'';position:absolute;inset:-18px;border-radius:50%;border:1px solid rgba(200,116,138,.15);animation:pulse 2s ease-in-out infinite .3s}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.06);opacity:.5}}
+.waiting-name{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:6px}
+.waiting-status{font-size:13px;color:#5a6478}
+.dots span{display:inline-block;animation:blink 1.4s infinite both}
+.dots span:nth-child(2){animation-delay:.2s}.dots span:nth-child(3){animation-delay:.4s}
+@keyframes blink{0%,80%,100%{opacity:0}40%{opacity:1}}
+#top-bar{position:absolute;top:0;left:0;right:0;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(to bottom,rgba(0,0,0,.7),transparent);z-index:10}
+.top-info{display:flex;align-items:center;gap:12px}
+.top-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:16px;color:#fff}
+.top-name{font-size:14px;font-weight:500}
+.top-spec{font-size:11px;color:rgba(255,255,255,.5)}
+.call-timer{font-size:13px;color:rgba(255,255,255,.7);background:rgba(0,0,0,.4);padding:4px 12px;border-radius:20px}
+.enc-badge{font-size:11px;color:#7a9e8a;background:rgba(122,158,138,.15);border:1px solid rgba(122,158,138,.2);padding:4px 10px;border-radius:20px}
+#controls{position:absolute;bottom:0;left:0;right:0;padding:24px;display:flex;align-items:center;justify-content:center;gap:16px;background:linear-gradient(to top,rgba(0,0,0,.8),transparent);z-index:10}
+.ctrl-btn{width:56px;height:56px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:20px;background:rgba(255,255,255,.12);color:#fff;backdrop-filter:blur(8px);transition:all .2s}
+.ctrl-btn:hover{background:rgba(255,255,255,.2);transform:scale(1.05)}
+.ctrl-btn.active{background:rgba(200,116,138,.3);border:1px solid rgba(200,116,138,.5)}
+.ctrl-btn.end-call{background:#c8748a;width:64px;height:64px;font-size:22px}
+.ctrl-btn.end-call:hover{background:#b5607a}
+.ctrl-wrap{display:flex;flex-direction:column;align-items:center}
+.ctrl-label{font-size:10px;color:rgba(255,255,255,.5);text-align:center;margin-top:4px}
+#conn-status{position:absolute;top:70px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.6);color:#fff;padding:6px 16px;border-radius:20px;font-size:12px;z-index:10;transition:opacity .3s}
+#conn-status.hidden{opacity:0}
+#ended-screen{position:absolute;inset:0;background:#0d0f14;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:20}
+#ended-screen.show{display:flex}
+#ended-screen h2{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;margin-bottom:8px}
+#ended-screen p{color:#5a6478;font-size:14px;margin-bottom:28px}
+.back-btn{padding:12px 28px;background:#c8748a;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;text-decoration:none;display:inline-block}
+.back-btn:hover{background:#b5607a}
+</style>
+</head>
+<body>
+<div id="video-container">
+  <video id="remote-video" autoplay playsinline></video>
+  <video id="local-video" autoplay playsinline muted></video>
+
+  <div id="waiting-screen">
+    <div class="waiting-avatar" style="background:{{ peer_color }}">{{ peer_initial }}</div>
+    <div class="waiting-name">{{ peer_name }}</div>
+    <div class="waiting-status">Connecting<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+  </div>
+
+  <div id="top-bar">
+    <div class="top-info">
+      <div class="top-avatar" style="background:{{ peer_color }}">{{ peer_initial }}</div>
+      <div>
+        <div class="top-name">{{ peer_name }}</div>
+        <div class="top-spec">{{ peer_role }}</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span class="enc-badge">🔒 Encrypted</span>
+      <div class="call-timer" id="call-timer">00:00</div>
+    </div>
+  </div>
+
+  <div id="conn-status">⟳ Establishing connection…</div>
+
+  <div id="controls">
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn" id="btn-mic" onclick="toggleMic()">🎤</button>
+      <div class="ctrl-label">Mute</div>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn" id="btn-cam" onclick="toggleCam()">📷</button>
+      <div class="ctrl-label">Camera</div>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn end-call" onclick="endCall()">📵</button>
+      <div class="ctrl-label" style="color:#c8748a">End</div>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn" onclick="togglePiP()">⛶</button>
+      <div class="ctrl-label">Resize</div>
+    </div>
+    <div class="ctrl-wrap">
+      <button class="ctrl-btn" onclick="goBack()">💬</button>
+      <div class="ctrl-label">Chat</div>
+    </div>
+  </div>
+
+  <div id="ended-screen">
+    <div style="font-size:48px;margin-bottom:16px">📵</div>
+    <h2>Call Ended</h2>
+    <p>Duration: <span id="final-duration">00:00</span></p>
+    <a href="{{ back_url }}" class="back-btn">← Return to Chat</a>
+  </div>
+</div>
+
+<script>
+const ROOM_ID   = "{{ room_id }}";
+const MY_ROLE   = "{{ my_role }}";
+const BACK_URL  = "{{ back_url }}";
+const IS_CALLER = {{ 'true' if is_caller else 'false' }};
+
+const RTC_CONFIG = {iceServers:[
+  {urls:'stun:stun.l.google.com:19302'},
+  {urls:'stun:stun1.l.google.com:19302'},
+]};
+
+let pc=null, localStream=null, callStartTime=null, timerInterval=null, micOn=true, camOn=true;
+
+const socket = io();
+
+socket.on('connect', async () => {
+  socket.emit('join_video_room', {room_id: ROOM_ID, role: MY_ROLE});
+  await startLocalStream();
+  if (IS_CALLER) await createOffer();
+});
+
+socket.on('peer_joined_video', async () => {
+  setStatus('Peer joined — connecting…');
+  if (!IS_CALLER && !pc) {
+    initPC();
+  }
+});
+
+socket.on('webrtc_offer', async ({sdp}) => {
+  if (!pc) initPC();
+  await pc.setRemoteDescription(new RTCSessionDescription({type:'offer',sdp}));
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  socket.emit('webrtc_answer', {room_id:ROOM_ID, sdp:answer.sdp});
+});
+
+socket.on('webrtc_answer', async ({sdp}) => {
+  await pc?.setRemoteDescription(new RTCSessionDescription({type:'answer',sdp}));
+});
+
+socket.on('webrtc_ice', async ({candidate}) => {
+  try { await pc?.addIceCandidate(new RTCIceCandidate(candidate)); } catch(e) {}
+});
+
+socket.on('call_ended', () => showEndedScreen());
+
+async function startLocalStream() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({video:true,audio:true});
+    document.getElementById('local-video').srcObject = localStream;
+  } catch(e) {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({video:false,audio:true});
+      setStatus('Camera unavailable — audio only');
+    } catch { setStatus('Camera/mic access denied'); }
+  }
+}
+
+function initPC() {
+  pc = new RTCPeerConnection(RTC_CONFIG);
+  localStream?.getTracks().forEach(t => pc.addTrack(t, localStream));
+  pc.ontrack = (e) => {
+    const rv = document.getElementById('remote-video');
+    if (rv.srcObject !== e.streams[0]) { rv.srcObject = e.streams[0]; onCallConnected(); }
+  };
+  pc.onicecandidate = ({candidate}) => {
+    if (candidate) socket.emit('webrtc_ice', {room_id:ROOM_ID, candidate:candidate.toJSON()});
+  };
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState==='connected') { setStatus('Connected ✓', true); onCallConnected(); }
+    if (pc.connectionState==='disconnected') setStatus('Connection lost…');
+    if (pc.connectionState==='failed') setStatus('Connection failed');
+  };
+}
+
+async function createOffer() {
+  initPC();
+  const offer = await pc.createOffer({offerToReceiveAudio:true,offerToReceiveVideo:true});
+  await pc.setLocalDescription(offer);
+  socket.emit('webrtc_offer', {room_id:ROOM_ID, sdp:offer.sdp});
+  setStatus('Waiting for peer…');
+}
+
+function onCallConnected() {
+  document.getElementById('waiting-screen').classList.add('hidden');
+  if (!callStartTime) { callStartTime=Date.now(); timerInterval=setInterval(updateTimer,1000); }
+}
+
+function toggleMic() {
+  micOn=!micOn; localStream?.getAudioTracks().forEach(t=>t.enabled=micOn);
+  document.getElementById('btn-mic').textContent=micOn?'🎤':'🔇';
+  document.getElementById('btn-mic').classList.toggle('active',!micOn);
+}
+function toggleCam() {
+  camOn=!camOn; localStream?.getVideoTracks().forEach(t=>t.enabled=camOn);
+  document.getElementById('btn-cam').textContent=camOn?'📷':'🚫';
+  document.getElementById('btn-cam').classList.toggle('active',!camOn);
+}
+let bigPip=false;
+function togglePiP() {
+  bigPip=!bigPip; const v=document.getElementById('local-video');
+  v.style.width=bigPip?'320px':'200px'; v.style.height=bigPip?'240px':'150px';
+}
+function endCall() { socket.emit('end_call',{room_id:ROOM_ID}); cleanupAndEnd(); }
+function goBack() { socket.emit('end_call',{room_id:ROOM_ID}); window.location.href=BACK_URL; }
+function cleanupAndEnd() { clearInterval(timerInterval); localStream?.getTracks().forEach(t=>t.stop()); pc?.close(); showEndedScreen(); }
+function showEndedScreen() {
+  document.getElementById('final-duration').textContent=document.getElementById('call-timer').textContent;
+  document.getElementById('ended-screen').classList.add('show');
+  clearInterval(timerInterval); localStream?.getTracks().forEach(t=>t.stop()); pc?.close();
+}
+function updateTimer() {
+  if (!callStartTime) return;
+  const s=Math.floor((Date.now()-callStartTime)/1000);
+  document.getElementById('call-timer').textContent=`${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
+}
+function setStatus(msg,hide=false) {
+  const el=document.getElementById('conn-status'); el.textContent=msg; el.classList.toggle('hidden',hide);
+  if(hide) setTimeout(()=>el.classList.add('hidden'),3000);
+}
+
+// Draggable local video
+(function(){
+  const el=document.getElementById('local-video'); let drag=false,ox=0,oy=0;
+  el.addEventListener('mousedown',e=>{drag=true;ox=e.clientX-el.offsetLeft;oy=e.clientY-el.offsetTop;});
+  document.addEventListener('mousemove',e=>{if(!drag)return;el.style.left=Math.max(0,Math.min(window.innerWidth-el.offsetWidth,e.clientX-ox))+'px';el.style.top=Math.max(0,Math.min(window.innerHeight-el.offsetHeight,e.clientY-oy))+'px';el.style.right='auto';el.style.bottom='auto';});
+  document.addEventListener('mouseup',()=>drag=false);
+})();
+</script>
+</body>
+</html>

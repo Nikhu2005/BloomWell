@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Setup Profile</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--rose:#c8748a;--dark:#1a1a2e;--muted:#8a8aaa;--border:#2a2a4a;--surface:#16213e}
+body{min-height:100vh;background:var(--dark);display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;background-image:radial-gradient(circle at 50% 0%,rgba(200,116,138,.15) 0%,transparent 60%)}
+.card{width:100%;max-width:400px;padding:48px 40px;background:var(--surface);border-radius:20px;border:1px solid var(--border)}
+.brand{text-align:center;margin-bottom:36px}
+.brand h1{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300;color:#fff;letter-spacing:1px}
+.brand h1 span{color:var(--rose)}
+.brand p{font-size:13px;color:var(--muted);margin-top:6px}
+.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(200,116,138,.15);color:var(--rose);border:1px solid rgba(200,116,138,.3);border-radius:20px;padding:4px 14px;font-size:11px;margin-bottom:8px}
+.step-info{background:rgba(200,116,138,.08);border-left:3px solid var(--rose);padding:12px 16px;border-radius:6px;margin-bottom:20px;font-size:12px;color:var(--muted)}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+input{width:100%;padding:12px 16px;border:1px solid var(--border);border-radius:10px;background:rgba(255,255,255,.04);color:#fff;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:16px;transition:border-color .2s}
+input:focus{border-color:var(--rose)}
+.btn{width:100%;padding:14px;background:var(--rose);color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:500;letter-spacing:.3px;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.error{background:rgba(200,116,138,.1);border:1px solid rgba(200,116,138,.3);color:#f4a7b9;padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:16px}
+.hint{font-size:11px;color:var(--muted);margin-top:4px}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">
+    <div class="badge">✨ Complete Setup</div>
+    <h1>Bloom<span>Well</span></h1>
+    <p>Welcome to your wellness journey</p>
+  </div>
+  <div class="step-info">
+    📧 Account: <strong>{{ email }}</strong>
+  </div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <label>Display Name (Username)</label>
+    <input type="text" name="username" placeholder="e.g. Sarah Johnson" required autocomplete="username" minlength="2" maxlength="50"/>
+    <p class="hint">This is how you'll be known in the app (shown to doctors)</p>
+    
+    <label>Create Password</label>
+    <input type="password" name="password" placeholder="••••••••" required minlength="6"/>
+    <p class="hint">Use at least 6 characters for security</p>
+    
+    <button type="submit" class="btn">Complete Setup →</button>
+  </form>
+</div>
+</body>
+</html>

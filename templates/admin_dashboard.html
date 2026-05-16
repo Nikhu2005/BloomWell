@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Admin Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --rose:#c8748a;--sage:#7a9e8a;--dark:#1a1a2e;--muted:#8a8aaa;
+  --border:#2a2a4a;--surface:#16213e;--card:#1e2a45;--text:#d4dbe8;
+  --success:#5a9e6a;--warn:#c8a45a;--sidebar-w:240px;
+}
+body{background:var(--dark);font-family:'DM Sans',sans-serif;color:var(--text);min-height:100vh;display:flex}
+
+/* ── Sidebar ── */
+.sidebar{width:var(--sidebar-w);background:var(--surface);border-right:1px solid var(--border);position:fixed;top:0;left:0;height:100vh;display:flex;flex-direction:column}
+.brand{padding:24px 20px;border-bottom:1px solid var(--border)}
+.brand h1{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;color:#fff}
+.brand h1 span{color:var(--rose)}
+.brand p{font-size:11px;color:var(--muted);margin-top:2px}
+.nav{padding:16px 12px;flex:1}
+.nav-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 12px 4px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;cursor:pointer;font-size:13px;color:var(--muted);transition:all .15s;text-decoration:none;margin-bottom:2px}
+.nav-item:hover,.nav-item.active{background:rgba(200,116,138,.12);color:var(--rose)}
+.sidebar-foot{padding:16px 20px;border-top:1px solid var(--border)}
+.logout{display:block;text-align:center;padding:10px;background:rgba(200,116,138,.1);color:var(--rose);border-radius:8px;text-decoration:none;font-size:13px}
+.logout:hover{background:rgba(200,116,138,.2)}
+
+/* ── Main ── */
+.main{margin-left:var(--sidebar-w);flex:1;padding:32px}
+.page{display:none}.page.active{display:block}
+.page-title{font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:300;margin-bottom:24px}
+
+/* ── Stats ── */
+.stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:32px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:22px;position:relative;overflow:hidden}
+.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.stat.s-rose::before{background:var(--rose)}
+.stat.s-sage::before{background:var(--sage)}
+.stat.s-warn::before{background:var(--warn)}
+.stat .num{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;line-height:1}
+.stat .lbl{font-size:12px;color:var(--muted);margin-top:4px}
+.stat .sub{font-size:11px;color:var(--muted);margin-top:8px;opacity:.7}
+
+/* ── Table ── */
+.table-card{background:var(--card);border:1px solid var(--border);border-radius:14px;overflow:hidden;margin-bottom:24px}
+.table-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.table-header h3{font-size:15px;font-weight:500}
+table{width:100%;border-collapse:collapse}
+th{padding:10px 16px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+td{padding:12px 16px;font-size:13px;border-bottom:1px solid rgba(42,42,74,.5)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(200,116,138,.04)}
+.badge{display:inline-flex;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:500}
+.badge-verified{background:rgba(90,158,106,.15);color:var(--success)}
+.badge-pending{background:rgba(200,164,90,.15);color:var(--warn)}
+.badge-cat{background:rgba(122,158,138,.15);color:var(--sage)}
+.action-btn{padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid;transition:all .15s;font-family:'DM Sans',sans-serif}
+.btn-verify{border-color:var(--success);color:var(--success);background:transparent}
+.btn-verify:hover{background:var(--success);color:#fff}
+.btn-delete{border-color:var(--rose);color:var(--rose);background:transparent}
+.btn-delete:hover{background:var(--rose);color:#fff}
+
+/* ── Add Doctor Modal ── */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;display:none;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;width:100%;max-width:500px;max-height:90vh;overflow-y:auto}
+.modal h2{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;margin-bottom:20px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.form-group input,.form-group select{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:rgba(255,255,255,.04);color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;outline:none}
+.form-group input:focus,.form-group select:focus{border-color:var(--sage)}
+.form-group select option{background:var(--dark)}
+.modal-actions{display:flex;gap:10px;margin-top:20px;justify-content:flex-end}
+.btn-cancel{padding:10px 20px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted);cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px}
+.btn-submit{padding:10px 24px;background:var(--sage);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-family:'DM Sans',sans-serif;font-weight:500}
+.btn-submit:hover{background:#6a8e7a}
+.add-btn{padding:8px 16px;background:var(--sage);color:#fff;border:none;border-radius:8px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500}
+.add-btn:hover{background:#6a8e7a}
+
+/* ── Toast ── */
+#toast{position:fixed;bottom:24px;right:24px;background:#fff;color:var(--dark);padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:999;border-left:4px solid var(--sage)}
+#toast.show{opacity:1;transform:translateY(0)}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="brand">
+    <h1>Bloom<span>Well</span></h1>
+    <p>Admin Dashboard</p>
+  </div>
+  <nav class="nav">
+    <div class="nav-label">Overview</div>
+    <a class="nav-item active" href="#" onclick="showPage('overview',this)">📊 Stats Overview</a>
+    <div class="nav-label">Management</div>
+    <a class="nav-item" href="#" onclick="showPage('doctors',this)">🩺 Doctors
+      {% if stats.pending_doctors > 0 %}
+      <span style="margin-left:auto;background:var(--warn);color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">{{ stats.pending_doctors }}</span>
+      {% endif %}
+    </a>
+    <a class="nav-item" href="#" onclick="showPage('users',this)">👥 Users</a>
+  </nav>
+  <div class="sidebar-foot">
+    <a href="/admin/logout" class="logout">Sign Out</a>
+  </div>
+</aside>
+
+<main class="main">
+
+  <!-- Overview -->
+  <div class="page active" id="page-overview">
+    <div class="page-title">Platform Overview</div>
+    <div class="stats-grid">
+      <div class="stat s-rose">
+        <div class="num">{{ stats.total_users }}</div>
+        <div class="lbl">Verified Patients</div>
+      </div>
+      <div class="stat s-sage">
+        <div class="num">{{ stats.verified_doctors }}</div>
+        <div class="lbl">Active Doctors</div>
+        <div class="sub">{{ stats.pending_doctors }} pending verification</div>
+      </div>
+      <div class="stat s-warn">
+        <div class="num">{{ stats.total_messages }}</div>
+        <div class="lbl">Total Messages</div>
+      </div>
+      <div class="stat s-rose">
+        <div class="num">{{ stats.total_appointments }}</div>
+        <div class="lbl">Appointments</div>
+      </div>
+      <div class="stat s-sage">
+        <div class="num">{{ stats.total_doctors }}</div>
+        <div class="lbl">Total Doctors</div>
+      </div>
+      <div class="stat s-warn">
+        <div class="num">{{ ((stats.verified_doctors / stats.total_doctors * 100) if stats.total_doctors else 0) | int }}%</div>
+        <div class="lbl">Verification Rate</div>
+      </div>
+    </div>
+
+    <!-- Pending Doctors -->
+    {% set pending = doctors | selectattr('is_verified', 'equalto', false) | list %}
+    {% if pending %}
+    <div class="table-card">
+      <div class="table-header">
+        <h3>⚠️ Pending Verification ({{ pending|length }})</h3>
+      </div>
+      <table>
+        <thead><tr><th>Name</th><th>Specialty</th><th>Experience</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for doc in pending %}
+          <tr id="doc-row-{{ doc.id }}">
+            <td><strong>{{ doc.name }}</strong></td>
+            <td>{{ doc.specialty }}</td>
+            <td>{{ doc.experience }} yrs</td>
+            <td>
+              <button class="action-btn btn-verify" onclick="verifyDoctor({{ doc.id }})">✓ Verify</button>
+              <button class="action-btn btn-delete" onclick="deleteDoctor({{ doc.id }})" style="margin-left:6px">✗ Remove</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Doctors -->
+  <div class="page" id="page-doctors">
+    <div class="page-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Doctors</span>
+      <button class="add-btn" onclick="document.getElementById('add-modal').classList.add('open')">+ Add Doctor</button>
+    </div>
+    <div class="table-card">
+      <table>
+        <thead><tr><th>Name</th><th>Specialty</th><th>Category</th><th>Rating</th><th>Status</th><th>Actions</th></tr></thead>
+        <tbody>
+          {% for doc in doctors %}
+          <tr id="doc-row-{{ doc.id }}">
+            <td><strong>{{ doc.name }}</strong><br><span style="font-size:11px;color:var(--muted)">{{ doc.email or '—' }}</span></td>
+            <td>{{ doc.specialty }}</td>
+            <td><span class="badge badge-cat">{{ doc.category }}</span></td>
+            <td>★ {{ doc.rating }}</td>
+            <td>
+              <span class="badge {% if doc.is_verified %}badge-verified{% else %}badge-pending{% endif %}" id="status-badge-{{ doc.id }}">
+                {% if doc.is_verified %}Verified{% else %}Pending{% endif %}
+              </span>
+            </td>
+            <td>
+              {% if not doc.is_verified %}
+              <button class="action-btn btn-verify" onclick="verifyDoctor({{ doc.id }})">✓ Verify</button>
+              {% endif %}
+              <button class="action-btn btn-delete" onclick="deleteDoctor({{ doc.id }})" style="margin-left:4px">✗ Remove</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Users -->
+  <div class="page" id="page-users">
+    <div class="page-title">Registered Patients</div>
+    <div class="table-card">
+      <table>
+        <thead><tr><th>Username</th><th>Type</th><th>Joined</th></tr></thead>
+        <tbody>
+          {% for user in users %}
+          <tr>
+            <td><strong>{{ user.username }}</strong></td>
+            <td><span class="badge {% if user.anonymous %}badge-pending{% else %}badge-verified{% endif %}">{% if user.anonymous %}Anonymous{% else %}Named{% endif %}</span></td>
+            <td style="color:var(--muted);font-size:12px">{{ user.created_at.strftime('%b %d, %Y') }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- Add Doctor Modal -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <h2>Add New Doctor</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Full Name</label>
+        <input type="text" id="add-name" placeholder="Dr. First Last"/>
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="add-email" placeholder="dr@bloom.dev"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Specialty</label>
+        <input type="text" id="add-specialty" placeholder="e.g. Gynaecologist"/>
+      </div>
+      <div class="form-group">
+        <label>Category</label>
+        <select id="add-category">
+          <option value="menstrual">Menstrual</option>
+          <option value="sexual">Sexual Health</option>
+          <option value="mental">Mental Health</option>
+          <option value="general">General</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Experience (years)</label>
+        <input type="number" id="add-exp" placeholder="5" min="0"/>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="add-password" placeholder="Temporary password"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Avatar Color</label>
+      <input type="color" id="add-color" value="#f4a7b9"/>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="document.getElementById('add-modal').classList.remove('open')">Cancel</button>
+      <button class="btn-submit" onclick="addDoctor()">Add Doctor</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+function showPage(name, el) {
+  event.preventDefault();
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  el.classList.add('active');
+}
+
+async function verifyDoctor(id) {
+  const res  = await fetch(`/admin/doctor/verify/${id}`, {method:'POST'});
+  const data = await res.json();
+  if (data.status === 'ok') {
+    const badge = document.getElementById(`status-badge-${id}`);
+    if (badge) { badge.textContent = 'Verified'; badge.className = 'badge badge-verified'; }
+    // Remove verify button
+    document.querySelector(`#doc-row-${id} .btn-verify`)?.remove();
+    toast(`${data.name} verified ✓`);
+  }
+}
+
+async function deleteDoctor(id) {
+  if (!confirm('Remove this doctor? This cannot be undone.')) return;
+  const res = await fetch(`/admin/doctor/delete/${id}`, {method:'POST'});
+  if ((await res.json()).status === 'ok') {
+    document.getElementById(`doc-row-${id}`)?.remove();
+    toast('Doctor removed');
+  }
+}
+
+async function addDoctor() {
+  const payload = {
+    name:       document.getElementById('add-name').value.trim(),
+    email:      document.getElementById('add-email').value.trim(),
+    specialty:  document.getElementById('add-specialty').value.trim(),
+    category:   document.getElementById('add-category').value,
+    experience: document.getElementById('add-exp').value || 0,
+    password:   document.getElementById('add-password').value,
+    avatar_color: document.getElementById('add-color').value,
+  };
+  if (!payload.name || !payload.email || !payload.password) { toast('Fill all required fields'); return; }
+  const res  = await fetch('/admin/doctor/add', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.error) { toast('Error: ' + data.error); return; }
+  document.getElementById('add-modal').classList.remove('open');
+  toast('Doctor added successfully!');
+  setTimeout(() => location.reload(), 1000);
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

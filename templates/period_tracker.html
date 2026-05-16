@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BloomWell – Period Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --rose:#c8748a;--rose-l:rgba(200,116,138,.12);--rose-ll:rgba(200,116,138,.06);
+  --sage:#7a9e8a;--cream:#fdf8f4;--dark:#2d2228;--muted:#8a7a80;
+  --border:#e8ddd8;--surface:#fff;--predict:rgba(200,116,138,.18);
+  --flow-light:#f9d5de;--flow-medium:#f4a7b9;--flow-heavy:#c8748a;
+}
+body{background:var(--cream);font-family:'DM Sans',sans-serif;color:var(--dark);min-height:100vh}
+.page-wrap{max-width:1100px;margin:0 auto;padding:24px}
+
+/* ── Header ── */
+.top-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+.top-bar h1{font-family:'Cormorant Garamond',serif;font-size:32px;font-weight:300}
+.top-bar h1 span{color:var(--rose)}
+.top-bar a{color:var(--muted);font-size:13px;text-decoration:none}
+.top-bar a:hover{color:var(--rose)}
+
+/* ── Summary cards ── */
+.summary-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px}
+.sum-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;text-align:center}
+.sum-card .val{font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:300;color:var(--rose);line-height:1}
+.sum-card .key{font-size:11px;color:var(--muted);margin-top:4px}
+.sum-card .sub{font-size:10px;color:var(--rose);margin-top:6px;font-weight:500}
+
+/* ── Main grid ── */
+.main-grid{display:grid;grid-template-columns:1fr 360px;gap:20px}
+
+/* ── Calendar ── */
+.calendar-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:24px}
+.cal-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.cal-header h2{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300}
+.cal-nav{display:flex;gap:8px}
+.cal-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:var(--cream);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;color:var(--muted);transition:all .15s}
+.cal-btn:hover{border-color:var(--rose);color:var(--rose)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{text-align:center;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:6px 0;font-weight:500}
+.cal-day{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:50%;font-size:13px;cursor:pointer;position:relative;transition:all .15s;border:2px solid transparent}
+.cal-day:hover:not(.empty){background:var(--rose-ll);border-color:var(--rose)}
+.cal-day.empty{pointer-events:none}
+.cal-day.today{font-weight:700;color:var(--rose)}
+.cal-day.period{background:var(--rose);color:#fff!important;font-weight:500}
+.cal-day.period:hover{background:#b5607a}
+.cal-day.period-light{background:var(--flow-light);color:var(--dark)}
+.cal-day.period-heavy{background:var(--flow-heavy);color:#fff}
+.cal-day.predicted{background:var(--predict);color:var(--rose)}
+.cal-day.predicted::after{content:'';position:absolute;bottom:3px;left:50%;transform:translateX(-50%);width:4px;height:4px;border-radius:50%;background:var(--rose);opacity:.5}
+.cal-day.fertile{background:rgba(122,158,138,.15);color:var(--sage)}
+.cal-legend{display:flex;gap:16px;margin-top:16px;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+
+/* ── Sidebar ── */
+.sidebar{display:flex;flex-direction:column;gap:16px}
+
+/* Log form */
+.log-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px}
+.log-card h3{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:300;margin-bottom:16px}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.form-group input,.form-group select,.form-group textarea{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--dark);background:var(--cream);outline:none;transition:border-color .15s}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:var(--rose);background:#fff}
+.form-group textarea{resize:none;height:70px}
+.date-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+
+/* Flow selector */
+.flow-row{display:flex;gap:8px}
+.flow-btn{flex:1;padding:8px 4px;border:1px solid var(--border);border-radius:8px;font-size:11px;cursor:pointer;text-align:center;transition:all .15s;background:#fff;color:var(--muted)}
+.flow-btn.active{border-color:var(--rose);background:var(--rose-l);color:var(--rose);font-weight:500}
+
+/* Symptoms */
+.symptoms-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sym-btn{padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-size:11px;cursor:pointer;text-align:center;transition:all .15s;background:#fff;color:var(--muted)}
+.sym-btn.active{border-color:var(--rose);background:var(--rose-l);color:var(--rose)}
+
+/* Mood */
+.mood-row{display:flex;gap:6px;flex-wrap:wrap}
+.mood-btn{padding:5px 10px;border:1px solid var(--border);border-radius:20px;font-size:12px;cursor:pointer;transition:all .15s;background:#fff}
+.mood-btn.active{border-color:var(--rose);background:var(--rose-l)}
+
+.log-submit-btn{width:100%;padding:12px;background:var(--rose);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:500;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background .15s;margin-top:4px}
+.log-submit-btn:hover{background:#b5607a}
+
+/* History */
+.history-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px;max-height:400px;overflow-y:auto}
+.history-card h3{font-family:'Cormorant Garamond',serif;font-size:20px;font-weight:300;margin-bottom:14px}
+.history-item{padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;position:relative}
+.history-item .h-dates{font-size:13px;font-weight:500}
+.history-item .h-meta{font-size:11px;color:var(--muted);margin-top:3px}
+.history-item .h-flow{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
+.h-delete{position:absolute;top:10px;right:10px;background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;opacity:.5;transition:opacity .15s}
+.h-delete:hover{opacity:1;color:#c85a5a}
+
+/* Toast */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--dark);color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transform:translateY(8px);transition:all .25s;pointer-events:none;z-index:999}
+#toast.show{opacity:1;transform:translateY(0)}
+
+/* Prediction banner */
+.predict-banner{background:linear-gradient(135deg,rgba(200,116,138,.1),rgba(122,158,138,.08));border:1px solid rgba(200,116,138,.2);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;margin-bottom:16px}
+.predict-banner .icon{font-size:28px}
+.predict-banner h4{font-size:14px;font-weight:500;color:var(--dark)}
+.predict-banner p{font-size:12px;color:var(--muted);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- Header -->
+  <div class="top-bar">
+    <h1>🌸 Period <span>Tracker</span></h1>
+    <a href="/dashboard">← Back to Dashboard</a>
+  </div>
+
+  <!-- Summary cards -->
+  <div class="summary-row">
+    <div class="sum-card">
+      <div class="val" id="cycle-day">—</div>
+      <div class="key">Cycle Day</div>
+      <div class="sub" id="cycle-phase">—</div>
+    </div>
+    <div class="sum-card">
+      <div class="val" id="avg-cycle">—</div>
+      <div class="key">Avg Cycle Length</div>
+      <div class="sub">days</div>
+    </div>
+    <div class="sum-card">
+      <div class="val" id="avg-period">—</div>
+      <div class="key">Avg Period Length</div>
+      <div class="sub">days</div>
+    </div>
+    <div class="sum-card">
+      <div class="val" id="total-cycles">{{ logs|length }}</div>
+      <div class="key">Cycles Logged</div>
+      <div class="sub">tracked</div>
+    </div>
+  </div>
+
+  <!-- Prediction banner -->
+  <div class="predict-banner" id="predict-banner" style="display:none">
+    <div class="icon">🔮</div>
+    <div>
+      <h4 id="predict-title">Next Period Prediction</h4>
+      <p id="predict-text">Loading…</p>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="main-grid">
+
+    <!-- Calendar -->
+    <div class="calendar-card">
+      <div class="cal-header">
+        <h2 id="cal-month-title">Month Year</h2>
+        <div class="cal-nav">
+          <button class="cal-btn" onclick="changeMonth(-1)">‹</button>
+          <button class="cal-btn" onclick="changeMonth(0)">Today</button>
+          <button class="cal-btn" onclick="changeMonth(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div class="cal-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--rose)"></div>Period</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--predict)"></div>Predicted</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(122,158,138,.3)"></div>Fertile Window</div>
+        <div class="legend-item"><div class="legend-dot" style="border:2px solid var(--rose);background:transparent;box-sizing:border-box"></div>Today</div>
+      </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+
+      <!-- Log form -->
+      <div class="log-card">
+        <h3>Log Period</h3>
+        <div class="form-group">
+          <label>Flow Intensity</label>
+          <div class="flow-row">
+            <button class="flow-btn" data-flow="light" onclick="selectFlow('light')">💧 Light</button>
+            <button class="flow-btn active" data-flow="medium" onclick="selectFlow('medium')">💧💧 Medium</button>
+            <button class="flow-btn" data-flow="heavy" onclick="selectFlow('heavy')">💧💧💧 Heavy</button>
+          </div>
+        </div>
+        <div class="form-group date-row">
+          <div>
+            <label>Start Date</label>
+            <input type="date" id="start-date"/>
+          </div>
+          <div>
+            <label>End Date</label>
+            <input type="date" id="end-date"/>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Symptoms</label>
+          <div class="symptoms-grid">
+            <button class="sym-btn" data-sym="cramps" onclick="toggleSym(this)">😣 Cramps</button>
+            <button class="sym-btn" data-sym="headache" onclick="toggleSym(this)">🤕 Headache</button>
+            <button class="sym-btn" data-sym="bloating" onclick="toggleSym(this)">🤰 Bloating</button>
+            <button class="sym-btn" data-sym="fatigue" onclick="toggleSym(this)">😴 Fatigue</button>
+            <button class="sym-btn" data-sym="backpain" onclick="toggleSym(this)">🔙 Back Pain</button>
+            <button class="sym-btn" data-sym="nausea" onclick="toggleSym(this)">🤢 Nausea</button>
+            <button class="sym-btn" data-sym="acne" onclick="toggleSym(this)">😤 Acne</button>
+            <button class="sym-btn" data-sym="cravings" onclick="toggleSym(this)">🍫 Cravings</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Mood</label>
+          <div class="mood-row">
+            <button class="mood-btn" data-mood="happy" onclick="selectMood('happy')">😊 Happy</button>
+            <button class="mood-btn" data-mood="calm" onclick="selectMood('calm')">😌 Calm</button>
+            <button class="mood-btn" data-mood="anxious" onclick="selectMood('anxious')">😰 Anxious</button>
+            <button class="mood-btn" data-mood="irritable" onclick="selectMood('irritable')">😤 Irritable</button>
+            <button class="mood-btn" data-mood="sad" onclick="selectMood('sad')">😢 Sad</button>
+            <button class="mood-btn" data-mood="tired" onclick="selectMood('tired')">😪 Tired</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Notes</label>
+          <textarea id="notes-input" placeholder="Any additional notes…"></textarea>
+        </div>
+        <button class="log-submit-btn" onclick="submitLog()">Save Period Log 🌸</button>
+      </div>
+
+      <!-- History -->
+      <div class="history-card">
+        <h3>History</h3>
+        <div id="history-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+let logs        = [];
+let currentFlow = 'medium';
+let currentMood = '';
+let viewYear    = new Date().getFullYear();
+let viewMonth   = new Date().getMonth();
+
+const MONTHS = ['January','February','March','April','May','June',
+                'July','August','September','October','November','December'];
+const DAYS   = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+document.getElementById('start-date').value = toDateStr(new Date());
+
+async function init() {
+  const res = await fetch('/api/period/logs');
+  logs      = await res.json();
+  renderCalendar(); renderHistory(); updateStats();
+}
+init();
+
+// ── Calendar ──────────────────────────────────────────────────────────────────
+function changeMonth(delta) {
+  if (delta === 0) { viewYear=new Date().getFullYear(); viewMonth=new Date().getMonth(); }
+  else { viewMonth+=delta; if(viewMonth>11){viewMonth=0;viewYear++} if(viewMonth<0){viewMonth=11;viewYear--} }
+  renderCalendar();
+}
+
+function renderCalendar() {
+  document.getElementById('cal-month-title').textContent = `${MONTHS[viewMonth]} ${viewYear}`;
+  const grid    = document.getElementById('cal-grid');
+  const today   = new Date(); today.setHours(0,0,0,0);
+  const first   = new Date(viewYear, viewMonth, 1).getDay();
+  const daysIn  = new Date(viewYear, viewMonth+1, 0).getDate();
+
+  // Build sets of highlighted dates
+  const periodDays   = new Map(); // date_str -> flow
+  const predictedSet = new Set();
+  const fertileSet   = new Set();
+
+  logs.forEach(l => {
+    if (!l.start_date) return;
+    const start = new Date(l.start_date+'T00:00:00');
+    const end   = l.end_date ? new Date(l.end_date+'T00:00:00') : new Date(start.getTime()+4*86400000);
+    for (let d=new Date(start); d<=end; d.setDate(d.getDate()+1))
+      periodDays.set(toDateStr(d), l.flow || 'medium');
+  });
+
+  // Predict next periods
+  const predictions = getPredictions();
+  predictions.forEach(p => {
+    const pEnd = new Date(p.getTime() + 5*86400000);
+    for (let d=new Date(p); d<=pEnd; d.setDate(d.getDate()+1))
+      predictedSet.add(toDateStr(d));
+    // Fertile window: ~14 days before next period ±3 days
+    const avgCycle = getAvgCycle() || 28;
+    const ovulation = new Date(p.getTime() - 14*86400000);
+    for (let i=-3; i<=3; i++) {
+      const fd = new Date(ovulation); fd.setDate(fd.getDate()+i);
+      if (!periodDays.has(toDateStr(fd)) && !predictedSet.has(toDateStr(fd)))
+        fertileSet.add(toDateStr(fd));
+    }
+  });
+
+  let html = DAYS.map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  for (let i=0; i<first; i++) html += `<div class="cal-day empty"></div>`;
+
+  for (let day=1; day<=daysIn; day++) {
+    const d   = new Date(viewYear, viewMonth, day); d.setHours(0,0,0,0);
+    const ds  = toDateStr(d);
+    const flow= periodDays.get(ds);
+    let cls   = 'cal-day';
+    if (d.getTime()===today.getTime()) cls += ' today';
+    if (flow) {
+      cls += flow==='heavy' ? ' period period-heavy' : flow==='light' ? ' period period-light' : ' period';
+    } else if (predictedSet.has(ds)) cls += ' predicted';
+    else if (fertileSet.has(ds))     cls += ' fertile';
+    html += `<div class="${cls}" title="${ds}">${day}</div>`;
+  }
+  grid.innerHTML = html;
+}
+
+// ── Stats & Predictions ───────────────────────────────────────────────────────
+function getAvgCycle() {
+  const cycles = logs.filter(l=>l.cycle_length&&l.cycle_length>10&&l.cycle_length<60).map(l=>l.cycle_length);
+  return cycles.length ? Math.round(cycles.reduce((a,b)=>a+b,0)/cycles.length) : null;
+}
+
+function getAvgPeriod() {
+  const lengths = logs.filter(l=>l.start_date&&l.end_date).map(l=>{
+    const s=new Date(l.start_date+'T00:00:00'); const e=new Date(l.end_date+'T00:00:00');
+    return Math.round((e-s)/86400000)+1;
+  });
+  return lengths.length ? Math.round(lengths.reduce((a,b)=>a+b,0)/lengths.length) : null;
+}
+
+function getPredictions() {
+  if (!logs.length) return [];
+  const last      = new Date(logs[logs.length-1].start_date+'T00:00:00');
+  const avgCycle  = getAvgCycle() || 28;
+  const preds     = [];
+  let next        = new Date(last);
+  const today     = new Date(); today.setHours(0,0,0,0);
+  for (let i=0; i<4; i++) {
+    next = new Date(next.getTime() + avgCycle*86400000);
+    if (next >= today) preds.push(new Date(next));
+  }
+  return preds;
+}
+
+function updateStats() {
+  const today     = new Date(); today.setHours(0,0,0,0);
+  const avgCycle  = getAvgCycle();
+  const avgPeriod = getAvgPeriod();
+  document.getElementById('avg-cycle').textContent  = avgCycle  || '—';
+  document.getElementById('avg-period').textContent = avgPeriod || '—';
+
+  if (logs.length) {
+    const last       = new Date(logs[logs.length-1].start_date+'T00:00:00');
+    const cycleDay   = Math.floor((today-last)/86400000)+1;
+    const phase      = cycleDay<=5 ? '🩸 Menstrual' : cycleDay<=13 ? '🌱 Follicular' : cycleDay<=16 ? '🌟 Ovulation' : '🌙 Luteal';
+    document.getElementById('cycle-day').textContent  = cycleDay > 0 ? cycleDay : '—';
+    document.getElementById('cycle-phase').textContent = phase;
+  }
+
+  const preds = getPredictions();
+  if (preds.length) {
+    const banner = document.getElementById('predict-banner');
+    banner.style.display = 'flex';
+    const days = Math.round((preds[0]-today)/86400000);
+    document.getElementById('predict-title').textContent = days===0 ? 'Period may start today!' : days<0 ? 'Period may be late' : `Next period in ${days} day${days===1?'':'s'}`;
+    document.getElementById('predict-text').textContent  = `Expected: ${preds[0].toLocaleDateString('en-US',{month:'long',day:'numeric'})} · Avg cycle: ${getAvgCycle()||28} days`;
+  }
+}
+
+// ── History ───────────────────────────────────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  if (!logs.length) { list.innerHTML='<p style="color:var(--muted);font-size:13px;text-align:center;padding:20px">No periods logged yet</p>'; return; }
+  const sorted = [...logs].reverse();
+  list.innerHTML = sorted.map(l => {
+    const start  = new Date(l.start_date+'T00:00:00');
+    const flowC  = l.flow==='heavy'?'#c8748a':l.flow==='light'?'#f9d5de':'#f4a7b9';
+    const duration = l.end_date ? Math.round((new Date(l.end_date+'T00:00:00')-start)/86400000)+1 : '?';
+    const syms   = l.symptoms?.length ? l.symptoms.slice(0,3).join(', ') : '';
+    return `<div class="history-item">
+      <div class="h-dates">
+        <span class="h-flow" style="background:${flowC}"></span>
+        ${start.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}
+        ${l.end_date ? ' – '+new Date(l.end_date+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}
+      </div>
+      <div class="h-meta">
+        ${duration} days · ${l.flow||'medium'} flow
+        ${syms ? ' · '+syms : ''}
+        ${l.mood ? ' · '+l.mood : ''}
+        ${l.cycle_length ? ' · Cycle: '+l.cycle_length+'d' : ''}
+      </div>
+      <button class="h-delete" onclick="deleteLog(${l.id})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ── Log form ──────────────────────────────────────────────────────────────────
+function selectFlow(f) {
+  currentFlow = f;
+  document.querySelectorAll('.flow-btn').forEach(b=>b.classList.toggle('active', b.dataset.flow===f));
+}
+function toggleSym(btn) { btn.classList.toggle('active'); }
+function selectMood(m) {
+  currentMood = currentMood===m ? '' : m;
+  document.querySelectorAll('.mood-btn').forEach(b=>b.classList.toggle('active', b.dataset.mood===m && currentMood===m));
+}
+
+async function submitLog() {
+  const start = document.getElementById('start-date').value;
+  const end   = document.getElementById('end-date').value;
+  if (!start) { toast('Please select a start date'); return; }
+  const symptoms = [...document.querySelectorAll('.sym-btn.active')].map(b=>b.dataset.sym);
+  const payload  = {start_date:start, end_date:end||null, flow:currentFlow,
+                    symptoms, mood:currentMood, notes:document.getElementById('notes-input').value};
+  const res  = await fetch('/api/period/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data = await res.json();
+  if (data.status==='ok') {
+    logs.push({...payload, id:data.id, symptoms, cycle_length:data.cycle_length});
+    renderCalendar(); renderHistory(); updateStats();
+    // Reset form
+    document.getElementById('end-date').value=''; document.getElementById('notes-input').value='';
+    document.querySelectorAll('.sym-btn.active,.mood-btn.active').forEach(b=>b.classList.remove('active'));
+    currentMood=''; selectFlow('medium');
+    toast('Period logged! 🌸');
+  }
+}
+
+async function deleteLog(id) {
+  if (!confirm('Delete this log?')) return;
+  await fetch(`/api/period/delete/${id}`,{method:'DELETE'});
+  logs = logs.filter(l=>l.id!==id);
+  renderCalendar(); renderHistory(); updateStats();
+  toast('Log deleted');
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function toast(msg) {
+  const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+</script>
+</body>
+</html>

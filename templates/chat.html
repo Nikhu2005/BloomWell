@@ -6,12 +6,84 @@
 <title>BloomWell – Chat with {{ doctor.name }}</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}"/>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+<style>
+/* ── Video call button ── */
+.video-call-btn{display:flex;align-items:center;gap:6px;padding:7px 14px;background:rgba(122,158,138,.12);border:1px solid rgba(122,158,138,.3);color:#7a9e8a;border-radius:20px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
+.video-call-btn:hover{background:rgba(122,158,138,.2)}
+.video-call-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── Incoming call overlay ── */
+#call-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:1000;display:none;align-items:center;justify-content:center}
+#call-overlay.show{display:flex}
+.call-modal{background:#fff;border-radius:20px;padding:36px 32px;text-align:center;max-width:340px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.call-modal .call-icon{font-size:52px;margin-bottom:12px;animation:ring .6s ease-in-out infinite alternate}
+@keyframes ring{from{transform:rotate(-8deg)}to{transform:rotate(8deg)}}
+.call-modal h3{font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:300;color:#2d2228;margin-bottom:6px}
+.call-modal p{font-size:13px;color:#8a7a80;margin-bottom:24px}
+.call-actions{display:flex;gap:12px;justify-content:center}
+.call-accept{padding:12px 28px;background:#7a9e8a;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:500}
+.call-accept:hover{background:#6a8e7a}
+.call-decline{padding:12px 28px;background:rgba(200,116,138,.1);color:#c8748a;border:1px solid rgba(200,116,138,.3);border-radius:10px;font-size:14px;cursor:pointer;font-family:'DM Sans',sans-serif}
+.call-decline:hover{background:rgba(200,116,138,.2)}
+
+/* ── Call status toast ── */
+#call-status{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-10px);background:#2d2228;color:#fff;padding:10px 20px;border-radius:10px;font-size:13px;opacity:0;transition:all .3s;z-index:999;white-space:nowrap}
+#call-status.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── Appointment modal ── */
+#appt-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;display:none;align-items:center;justify-content:center}
+#appt-overlay.show{display:flex}
+.appt-modal{background:#fff;border-radius:20px;padding:32px;max-width:420px;width:90%}
+.appt-modal h3{font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:300;color:#2d2228;margin-bottom:20px}
+.appt-form-group{margin-bottom:14px}
+.appt-form-group label{display:block;font-size:11px;color:#8a7a80;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
+.appt-form-group input,.appt-form-group textarea{width:100%;padding:10px 14px;border:1px solid #e8ddd8;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:#2d2228;outline:none}
+.appt-form-group input:focus,.appt-form-group textarea:focus{border-color:#c8748a}
+.appt-form-group textarea{resize:none;height:70px}
+.appt-submit-btn{width:100%;padding:12px;background:#c8748a;color:#fff;border:none;border-radius:10px;font-size:14px;cursor:pointer;font-weight:500;margin-top:8px}
+.appt-cancel-btn{width:100%;padding:10px;background:transparent;color:#8a7a80;border:1px solid #e8ddd8;border-radius:10px;font-size:13px;cursor:pointer;margin-top:8px}
+</style>
 </head>
 <body class="chat-page">
 
+<!-- Incoming call overlay (if doctor calls back) -->
+<div id="call-overlay">
+  <div class="call-modal">
+    <div class="call-icon">📹</div>
+    <h3>Call Ready</h3>
+    <p id="call-overlay-text">Your video call is ready</p>
+    <div class="call-actions">
+      <button class="call-accept" id="call-join-btn">Join Now</button>
+      <button class="call-decline" onclick="dismissCallOverlay()">Later</button>
+    </div>
+  </div>
+</div>
+
+<!-- Call status -->
+<div id="call-status"></div>
+
+<!-- Appointment booking modal -->
+<div id="appt-overlay">
+  <div class="appt-modal">
+    <h3>📅 Book Appointment</h3>
+    <p style="font-size:12px;color:#8a7a80;margin-bottom:16px">with {{ doctor.name }} · {{ doctor.specialty }}</p>
+    <div class="appt-form-group">
+      <label>Date & Time</label>
+      <input type="datetime-local" id="appt-datetime"/>
+    </div>
+    <div class="appt-form-group">
+      <label>Reason / Note</label>
+      <textarea id="appt-note" placeholder="Brief description of your concern…"></textarea>
+    </div>
+    <button class="appt-submit-btn" onclick="submitAppointment()">Request Appointment</button>
+    <button class="appt-cancel-btn" onclick="document.getElementById('appt-overlay').classList.remove('show')">Cancel</button>
+  </div>
+</div>
+
 <div class="chat-layout">
 
-  <!-- Chat Header -->
+  <!-- Header -->
   <header class="chat-header">
     <a href="/dashboard" class="back-btn">← Back</a>
     <div class="chat-doctor-info">
@@ -24,21 +96,21 @@
       </div>
     </div>
     <div class="chat-header-badges">
+      <button class="video-call-btn" id="video-btn" onclick="requestVideoCall()">📹 Video Call</button>
+      <button class="video-call-btn" style="background:rgba(200,116,138,.1);border-color:rgba(200,116,138,.3);color:#c8748a" onclick="document.getElementById('appt-overlay').classList.add('show')">📅 Book Appt</button>
       <span class="badge-secure">🔒 Encrypted</span>
-      <div class="availability avail-yes">● Online</div>
+      <div class="availability avail-yes" id="connection-status">● Online</div>
     </div>
   </header>
 
-  <!-- Disclaimer Banner -->
+  <!-- Disclaimer -->
   <div class="chat-disclaimer">
     <span>🌸</span>
     This is a safe, anonymous space. Everything shared here stays private. For emergencies, please call 112.
   </div>
 
-  <!-- Messages Area -->
+  <!-- Messages -->
   <div class="messages-area" id="messages-area">
-
-    <!-- Welcome message -->
     <div class="msg-system">
       Consultation started with {{ doctor.name }} · {{ doctor.specialty }}
     </div>
@@ -46,18 +118,14 @@
     {% for msg in messages %}
     <div class="msg-wrapper {% if msg.sender == 'user' %}msg-user{% else %}msg-doctor{% endif %}">
       {% if msg.sender == 'doctor' %}
-      <div class="msg-avatar" style="background:{{ doctor.avatar_color }}">
-        {{ doctor.name.split()[1][0] }}
-      </div>
+      <div class="msg-avatar" style="background:{{ doctor.avatar_color }}">{{ doctor.name.split()[1][0] }}</div>
       {% endif %}
       <div class="msg-bubble">
-        <div class="msg-text">{{ msg.content }}</div>
+        <div class="msg-text">{% if msg.is_encrypted %}🔒 Encrypted message{% else %}{{ msg.content }}{% endif %}</div>
         <div class="msg-time">{{ msg.timestamp.strftime('%I:%M %p') }}</div>
       </div>
       {% if msg.sender == 'user' %}
-      <div class="msg-avatar user-avatar-chat">
-        {{ username[0].upper() }}
-      </div>
+      <div class="msg-avatar user-avatar-chat">{{ username[0].upper() }}</div>
       {% endif %}
     </div>
     {% endfor %}
@@ -68,8 +136,8 @@
       <p>Send your first message. You're in a safe, private space.</p>
       <div class="quick-prompts">
         <button class="quick-btn" onclick="fillPrompt('I have a question about my menstrual cycle')">Menstrual question</button>
-        <button class="quick-btn" onclick="fillPrompt('I\'ve been feeling anxious lately and need guidance')">Anxiety support</button>
-        <button class="quick-btn" onclick="fillPrompt('I have a general health concern I\'d like to discuss')">General question</button>
+        <button class="quick-btn" onclick="fillPrompt('I\'ve been feeling anxious lately')">Anxiety support</button>
+        <button class="quick-btn" onclick="fillPrompt('I have a general health concern')">General question</button>
       </div>
     </div>
     {% endif %}
@@ -80,11 +148,11 @@
     </div>
   </div>
 
-  <!-- Input Area -->
+  <!-- Input -->
   <footer class="chat-input-area">
     <div class="input-row">
       <textarea id="msg-input" placeholder="Type your message… this is a safe space 🌸"
-                rows="1" onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+                rows="1" onkeydown="handleKey(event)" oninput="autoResize(this);sendTyping(true)"></textarea>
       <button class="send-btn" onclick="sendMessage()" id="send-btn">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -92,102 +160,146 @@
         </svg>
       </button>
     </div>
-    <p class="input-note">🔒 Your message is encrypted and anonymous</p>
+    <p class="input-note">🔒 End-to-end encrypted · Anonymous</p>
   </footer>
-
 </div>
 
 <script>
-const ROOM_ID = "{{ room_id }}";
+const ROOM_ID      = "{{ room_id }}";
+const DOCTOR_COLOR = "{{ doctor.avatar_color }}";
+const DOCTOR_INIT  = "{{ doctor.name.split()[1][0] }}";
+const USER_INIT    = "{{ username[0].upper() }}";
+const DOCTOR_ID    = {{ doctor.id }};
+const MY_ROLE      = 'user';
 
-function scrollToBottom() {
-  const area = document.getElementById('messages-area');
-  area.scrollTop = area.scrollHeight;
+// ── Socket.IO ─────────────────────────────────────────────────────────────────
+const socket = io();
+socket.on('connect', () => {
+  socket.emit('join_chat', {room_id: ROOM_ID});
+  document.getElementById('connection-status').textContent = '● Online';
+});
+socket.on('disconnect', () => {
+  document.getElementById('connection-status').textContent = '● Offline';
+  showCallStatus('Connection lost. Reconnecting…');
+});
+socket.on('error', (data) => {
+  showCallStatus('Error: ' + (data.message || 'Unknown error'));
+});
+
+socket.on('new_message', (data) => {
+  // Skip own echoes — already shown via optimistic render in sendMessage()
+  if (data.sender === MY_ROLE) return;
+  document.getElementById('typing-indicator').classList.add('hidden');
+  appendMessage(data.content, 'doctor', data.timestamp, DOCTOR_COLOR, DOCTOR_INIT);
+});
+
+socket.on('peer_typing', (data) => {
+  if (data.role === 'doctor')
+    document.getElementById('typing-indicator').classList.toggle('hidden', !data.typing);
+});
+
+// Doctor accepted the call → redirect patient to video room
+socket.on('call_accepted', (data) => {
+  const overlay = document.getElementById('call-overlay');
+  document.getElementById('call-overlay-text').textContent = '{{ doctor.name }} accepted your call!';
+  document.getElementById('call-join-btn').onclick = () => window.location.href = data.video_url;
+  overlay.classList.add('show');
+  showCallStatus('✅ Doctor accepted! Joining call…');
+});
+
+socket.on('call_declined', (data) => {
+  showCallStatus('❌ ' + (data.message || 'Call declined'));
+  document.getElementById('video-btn').disabled = false;
+});
+
+socket.on('call_request_sent', (data) => {
+  if (data.status === 'offline') {
+    showCallStatus('⚠️ ' + data.message);
+    document.getElementById('video-btn').disabled = false;
+  } else {
+    showCallStatus('📹 Waiting for doctor to accept…');
+  }
+});
+
+socket.on('appointment_status_update', (data) => {
+  showCallStatus(`📅 Appointment ${data.status}: ${data.datetime}`);
+});
+
+// ── Video Call ─────────────────────────────────────────────────────────────────
+function requestVideoCall() {
+  document.getElementById('video-btn').disabled = true;
+  socket.emit('request_video_call', {room_id: ROOM_ID});
 }
+
+function dismissCallOverlay() {
+  document.getElementById('call-overlay').classList.remove('show');
+  document.getElementById('video-btn').disabled = false;
+}
+
+// ── Appointment ────────────────────────────────────────────────────────────────
+async function submitAppointment() {
+  const dt   = document.getElementById('appt-datetime').value;
+  const note = document.getElementById('appt-note').value;
+  if (!dt) { showCallStatus('Please select a date and time'); return; }
+  const res  = await fetch('/api/appointments/request', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({doctor_id: DOCTOR_ID, scheduled_at: dt, note})
+  });
+  const data = await res.json();
+  if (data.status === 'ok') {
+    document.getElementById('appt-overlay').classList.remove('show');
+    showCallStatus('✅ Appointment requested! Waiting for confirmation.');
+  }
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+function scrollToBottom() { const a=document.getElementById('messages-area'); a.scrollTop=a.scrollHeight; }
 scrollToBottom();
 
-function fillPrompt(text) {
-  document.getElementById('msg-input').value = text;
-  document.getElementById('msg-input').focus();
+function fillPrompt(t) { document.getElementById('msg-input').value=t; document.getElementById('msg-input').focus(); }
+function handleKey(e)  { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();} }
+function autoResize(el){ el.style.height='auto'; el.style.height=Math.min(el.scrollHeight,120)+'px'; }
+
+let typingTimer;
+function sendTyping(v) {
+  socket.emit('typing',{room_id:ROOM_ID,typing:v});
+  clearTimeout(typingTimer);
+  if(v) typingTimer=setTimeout(()=>socket.emit('typing',{room_id:ROOM_ID,typing:false}),2000);
 }
 
-function handleKey(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
-}
-
-function autoResize(el) {
-  el.style.height = 'auto';
-  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-}
-
-function appendMessage(content, sender, time, avatarColor, initial) {
-  const empty = document.querySelector('.chat-empty');
-  if (empty) empty.remove();
-
-  const area = document.getElementById('messages-area');
+function appendMessage(content, sender, time, color, initial) {
+  document.querySelector('.chat-empty')?.remove();
+  const area   = document.getElementById('messages-area');
   const typing = document.getElementById('typing-indicator');
-
-  const wrapper = document.createElement('div');
-  wrapper.className = `msg-wrapper ${sender === 'user' ? 'msg-user' : 'msg-doctor'}`;
-
-  if (sender === 'doctor') {
-    wrapper.innerHTML = `
-      <div class="msg-avatar" style="background:${avatarColor}">${initial}</div>
-      <div class="msg-bubble">
-        <div class="msg-text">${content}</div>
-        <div class="msg-time">${time}</div>
-      </div>`;
+  const wrap   = document.createElement('div');
+  wrap.className = `msg-wrapper ${sender==='user'?'msg-user':'msg-doctor'}`;
+  if (sender==='doctor') {
+    wrap.innerHTML=`<div class="msg-avatar" style="background:${color}">${initial}</div>
+      <div class="msg-bubble"><div class="msg-text">${content}</div><div class="msg-time">${time}</div></div>`;
   } else {
-    wrapper.innerHTML = `
-      <div class="msg-bubble">
-        <div class="msg-text">${content}</div>
-        <div class="msg-time">${time}</div>
-      </div>
-      <div class="msg-avatar user-avatar-chat">{{ username[0].upper() }}</div>`;
+    wrap.innerHTML=`<div class="msg-bubble"><div class="msg-text">${content}</div><div class="msg-time">${time}</div></div>
+      <div class="msg-avatar user-avatar-chat">${USER_INIT}</div>`;
   }
-
-  area.insertBefore(wrapper, typing);
-  scrollToBottom();
+  area.insertBefore(wrap, typing); scrollToBottom();
 }
 
-async function sendMessage() {
+function sendMessage() {
   const input = document.getElementById('msg-input');
-  const content = input.value.trim();
-  if (!content) return;
-
-  input.value = '';
-  input.style.height = 'auto';
+  const text  = input.value.trim();
+  if (!text) return;
+  const time  = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  appendMessage(text, 'user', time, '', '');
+  input.value=''; input.style.height='auto';
   document.getElementById('send-btn').disabled = true;
-
-  const time = new Date().toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'});
-  appendMessage(content, 'user', time, '', '');
-
-  // show typing
-  const typing = document.getElementById('typing-indicator');
-  typing.classList.remove('hidden');
-  scrollToBottom();
-
-  try {
-    const res  = await fetch('/send_message', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({room_id: ROOM_ID, content})
-    });
-    const data = await res.json();
-
-    await new Promise(r => setTimeout(r, 1200));
-    typing.classList.add('hidden');
-
-    appendMessage(
-      data.doctor_msg.content, 'doctor', data.doctor_msg.time,
-      "{{ doctor.avatar_color }}", "{{ doctor.name.split()[1][0] }}"
-    );
-  } catch(e) {
-    typing.classList.add('hidden');
-    appendMessage('Connection issue. Please try again.', 'doctor', time, '#eee', '!');
-  }
-
+  sendTyping(false);
+  socket.emit('send_message', {room_id: ROOM_ID, content: text, is_encrypted: false});
   document.getElementById('send-btn').disabled = false;
+}
+
+function showCallStatus(msg) {
+  const el = document.getElementById('call-status');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 4000);
 }
 </script>
 </body>
